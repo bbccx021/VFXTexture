@@ -319,12 +319,13 @@ const I18N = {
   pv_dissolve:['溶解','Dissolve'],
   tab_live:['即時','Live'], tab_dissolve:['溶解','Dissolve'],
   g_strike:['打擊 Strike','Strike'], g_glow:['光暈 Glow','Glow'], g_smoke:['煙霧 Smoke','Smoke'], g_rock:['石頭 Rock','Rock'], g_fire:['火焰 Fire','Fire'],
+  g_burst:['爆發 Burst','Burst'], g_liquid:['液體 Liquid','Liquid'], g_magic:['魔法 Magic','Magic'], g_util:['工具 Utility','Utility'],
   st_ready:['就緒','Ready'], live_live:['⬤ 即時預覽','⬤ Live'],
   hotkeys:['Space 重新生成  ·  S 下載  ·  R 隨機種子','Space regen  ·  S save  ·  R reseed'],
 };
 function t(k){ const e = I18N[k]; return e ? e[LANG === 'en' ? 1 : 0] : k; }
 function typeLabelDisp(raw){ return LANG === 'en' ? raw.replace(/\s*[一-鿿].*$/, '') : raw; }
-const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow','煙霧 Smoke':'g_smoke','石頭 Rock':'g_rock','火焰 Fire':'g_fire'};
+const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow','煙霧 Smoke':'g_smoke','石頭 Rock':'g_rock','火焰 Fire':'g_fire','爆發 Burst':'g_burst','液體 Liquid':'g_liquid','魔法 Magic':'g_magic','工具 Utility':'g_util'};
 const PVTAB_I18N = {live:'tab_live',dissolve:'tab_dissolve'};
 
 function applyI18n() {
@@ -897,6 +898,266 @@ function generateFlame(size, octaves, seed, freqScale) {
   return out;
 }
 
+// 衝擊波：亮環（前緣銳利）+ 內側拖尾，環半徑帶角度諧波不規則
+function generateShockwave(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 97 + 3) >>> 0 || 1); rng.next();
+  const k = Math.max(0.02, Math.min(1.4, freqScale));
+  const R = 0.34 * k;
+  const nH = 2 + (octaves % 4);
+  const H = [];
+  for (let h = 0; h < nH; h++) H.push({ f: 3 + h * 2, a: 0.02 + rng.rand() * 0.035, p: rng.rand() * Math.PI * 2 });
+  const lead = 0.012 * k, tail = 0.11 * k;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+      let Rm = R;
+      for (const h of H) Rm += R * h.a * Math.cos(h.f * a + h.p);
+      const d = r - Rm;
+      const v = Math.exp(-(d * d) / (lead * lead)) + (d < 0 ? Math.exp(d / tail) * 0.5 : 0);
+      out[j * size + i] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 槍口火光：橫向鋸齒火舌（fbm 咬邊）+ 白亮核心，兩色調
+function generateMuzzleFlash(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 8121 + 17) >>> 0 || 1); rng.next();
+  const k = Math.max(0.05, Math.min(1.5, freqScale));
+  const L = 0.36 * k, H0 = 0.085 * k;
+  const rot = (rng.rand() - 0.5) * 0.25;
+  const cosR = Math.cos(rot), sinR = Math.sin(rot);
+  const wob = fbm(size, Math.min(8, octaves), 6, 2, 0.55, (seed ^ 0x1abc) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const oy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const ox = i / size - 0.5;
+      const idx = j * size + i;
+      const x = ox * cosR + oy * sinR, y = -ox * sinR + oy * cosR;
+      const ax = Math.abs(x);
+      if (ax >= L) { out[idx] = 0; continue; }
+      // 半高沿 x 遞減，fbm 咬出鋸齒缺口與尖刺
+      const bite = 0.45 + (wob[idx] - 0.5) * 1.9;
+      const h = H0 * Math.pow(1 - ax / L, 0.8) * Math.max(0, bite);
+      const ay = Math.abs(y);
+      if (h <= 0 || ay >= h) { out[idx] = 0; continue; }
+      const core = ay < h * 0.45 && ax < L * 0.72 ? 1 : 0;
+      out[idx] = core ? 0.96 : 0.60;
+    }
+  }
+  return out;
+}
+
+// 火花：星形尖刺（角寬隨半徑收窄 → 尖）+ 外飛碎屑液滴
+function generateSparks(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 31337 + 7) >>> 0 || 1); rng.next();
+  const k = Math.max(0.05, Math.min(1.5, freqScale));
+  const nS = 3 + Math.round(rng.rand() * 2);
+  const spikes = [];
+  for (let s = 0; s < nS; s++) spikes.push({
+    a: rng.rand() * Math.PI * 2,
+    len: (0.16 + rng.rand() * 0.22) * k,
+    w: 0.10 + rng.rand() * 0.16,
+  });
+  const nD = 6 + Math.round(octaves);                        // octaves 控制碎屑量
+  const drops = [];
+  for (let d = 0; d < nD; d++) {
+    const a = rng.rand() * Math.PI * 2;
+    const dist = (0.14 + rng.rand() * 0.30) * k;
+    drops.push({
+      x: 0.5 + Math.cos(a) * dist, y: 0.5 + Math.sin(a) * dist,
+      ca: Math.cos(a), sa: Math.sin(a),
+      ru: (0.006 + rng.rand() * 0.016) * k * (1.5 + rng.rand() * 1.5),   // 徑向拉長
+      rv: (0.004 + rng.rand() * 0.009) * k,
+    });
+  }
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r = Math.hypot(dx, dy), pa = Math.atan2(dy, dx);
+      let f = Math.exp(-(r * r) / (0.0012 * k * k));         // 中心小核
+      for (const s of spikes) {
+        if (r >= s.len) continue;
+        let da = pa - s.a;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        const wa = s.w * (1 - r / s.len) + 1e-4;
+        f = Math.max(f, Math.exp(-(da * da) / (wa * wa)) * (1 - Math.pow(r / s.len, 2)));
+      }
+      let v = f > 0.42 ? 0.92 : 0;
+      if (v === 0) {
+        for (const d of drops) {
+          const ux = dx - (d.x - 0.5), uy = dy - (d.y - 0.5);
+          const lu = ux * d.ca + uy * d.sa, lv = -ux * d.sa + uy * d.ca;
+          if ((lu * lu) / (d.ru * d.ru) + (lv * lv) / (d.rv * d.rv) < 1) { v = 0.85; break; }
+        }
+      }
+      out[j * size + i] = v;
+    }
+  }
+  return out;
+}
+
+// 地裂：中心輻射的分形裂紋 + 分支 + 中心熱核（俯視角）
+function generateGroundCrack(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 69069 + 11) >>> 0 || 1); rng.next();
+  const k = Math.max(0.05, Math.min(1.4, freqScale));
+  const segs = [];
+  function fractalPath(x0, y0, x1, y1, levels, jag) {
+    let pts = [{ x: x0, y: y0 }, { x: x1, y: y1 }];
+    for (let l = 0; l < levels; l++) {
+      const np = [pts[0]];
+      for (let q = 1; q < pts.length; q++) {
+        const a = pts[q - 1], b = pts[q];
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const ddx = b.x - a.x, ddy = b.y - a.y;
+        const len = Math.hypot(ddx, ddy) || 1e-6;
+        const disp = (rng.rand() - 0.5) * jag * len * 2;
+        np.push({ x: mx - ddy / len * disp, y: my + ddx / len * disp });
+        np.push(b);
+      }
+      pts = np;
+    }
+    return pts;
+  }
+  function addCrack(pts, w0, w1, b0, b1) {
+    const n = pts.length - 1;
+    for (let q = 0; q < n; q++) {
+      const t = q / n;
+      segs.push({ ax: pts[q].x, ay: pts[q].y, bx: pts[q + 1].x, by: pts[q + 1].y,
+        w: Math.max(5e-4, w0 + (w1 - w0) * t), b: b0 + (b1 - b0) * t });
+    }
+  }
+  const nC = 4 + Math.round(octaves / 4);
+  const baseA = rng.rand() * Math.PI * 2;
+  for (let c = 0; c < nC; c++) {
+    const a = baseA + c * Math.PI * 2 / nC + (rng.rand() - 0.5) * 0.55;
+    const len = (0.26 + rng.rand() * 0.16) * k;
+    const pts = fractalPath(0.5, 0.5, 0.5 + Math.cos(a) * len, 0.5 + Math.sin(a) * len, 4, 0.32);
+    addCrack(pts, 0.011 * k, 0.001, 1.0, 0.3);
+    if (rng.rand() > 0.45) {
+      const pi = 2 + Math.floor(rng.rand() * (pts.length - 5));
+      const p = pts[pi];
+      const ba = a + (rng.rand() < 0.5 ? -1 : 1) * (0.5 + rng.rand() * 0.4);
+      const bl = len * (0.30 + rng.rand() * 0.25);
+      addCrack(fractalPath(p.x, p.y, p.x + Math.cos(ba) * bl, p.y + Math.sin(ba) * bl, 3, 0.32),
+        0.005 * k, 0.001, 0.6, 0.15);
+    }
+  }
+  const margin = 0.02 * k;
+  const rowSegs = Array.from({ length: size }, () => []);
+  for (let si = 0; si < segs.length; si++) {
+    const sg = segs[si];
+    const y0 = Math.max(0, Math.floor((Math.min(sg.ay, sg.by) - margin) * size));
+    const y1 = Math.min(size - 1, Math.ceil((Math.max(sg.ay, sg.by) + margin) * size));
+    for (let j = y0; j <= y1; j++) rowSegs[j].push(si);
+  }
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const py = j / size;
+    const list = rowSegs[j];
+    for (let i = 0; i < size; i++) {
+      const px = i / size;
+      let v = 0;
+      for (let s = 0; s < list.length; s++) {
+        const sg = segs[list[s]];
+        const d = segDist(px, py, sg.ax, sg.ay, sg.bx, sg.by);
+        if (d > sg.w * 8) continue;
+        const q = d / sg.w;
+        v += sg.b * (Math.exp(-q * q) + Math.exp(-q * q / 14) * 0.10);
+      }
+      const dx = px - 0.5, dy = py - 0.5;
+      v += Math.exp(-(dx * dx + dy * dy) / (0.0035 * k * k)) * 0.85;   // 中心熱核
+      out[j * size + i] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 飛濺：不規則主 blob（角度諧波 + fbm 咬邊）+ 徑向拉長的衛星液滴（血/毒/黏液通用）
+function generateSplatter(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 52711 + 29) >>> 0 || 1); rng.next();
+  const k = Math.max(0.05, Math.min(1.4, freqScale));
+  const r0 = 0.17 * k;
+  const nH = 3 + (octaves % 3);
+  const H = [];
+  for (let h = 0; h < nH; h++) H.push({ f: 2 + h + Math.floor(rng.rand() * 2), a: 0.10 + rng.rand() * 0.16, p: rng.rand() * Math.PI * 2 });
+  const nD = 6 + Math.round(octaves * 0.8);
+  const drops = [];
+  for (let d = 0; d < nD; d++) {
+    const a = rng.rand() * Math.PI * 2;
+    const dist = r0 * (1.25 + rng.rand() * 1.5);
+    drops.push({
+      x: 0.5 + Math.cos(a) * dist, y: 0.5 + Math.sin(a) * dist,
+      ca: Math.cos(a), sa: Math.sin(a),
+      ru: (0.010 + rng.rand() * 0.022) * k * (1 + rng.rand() * 1.6),
+      rv: (0.007 + rng.rand() * 0.013) * k,
+    });
+  }
+  const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x7d1) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const dx = i / size - 0.5;
+      const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+      let Rm = r0;
+      for (const h of H) Rm += r0 * h.a * Math.cos(h.f * a + h.p);
+      Rm *= 0.85 + (wob[idx] - 0.5) * 0.5;                   // fbm 咬邊
+      let v = r < Rm ? 0.9 : 0;
+      if (v === 0) {
+        for (const d of drops) {
+          const ux = dx - (d.x - 0.5), uy = dy - (d.y - 0.5);
+          const lu = ux * d.ca + uy * d.sa, lv = -ux * d.sa + uy * d.ca;
+          if ((lu * lu) / (d.ru * d.ru) + (lv * lv) / (d.rv * d.rv) < 1) { v = 0.85; break; }
+        }
+      }
+      out[idx] = v;
+    }
+  }
+  return out;
+}
+
+// 手繪墨圈：不規則粗圓環（角度諧波調變半徑與線寬 + fbm 抖動）
+function generateInkRing(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 40093 + 13) >>> 0 || 1); rng.next();
+  const k = Math.max(0.05, Math.min(1.4, freqScale));
+  const R = 0.33 * k, T0 = 0.055 * k;
+  const nH = 2 + (octaves % 3);
+  const HR = [], HT = [];
+  for (let h = 0; h < nH; h++) {
+    HR.push({ f: 2 + h * 2, a: 0.015 + rng.rand() * 0.03, p: rng.rand() * Math.PI * 2 });
+    HT.push({ f: 3 + h * 2, a: 0.15 + rng.rand() * 0.25, p: rng.rand() * Math.PI * 2 });
+  }
+  const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x3e9) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const dx = i / size - 0.5;
+      const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+      let Rm = R, Tm = T0;
+      for (const h of HR) Rm += R * h.a * Math.cos(h.f * a + h.p);
+      for (const h of HT) Tm += T0 * h.a * Math.cos(h.f * a + h.p);
+      Rm += (wob[idx] - 0.5) * 0.02 * k;
+      out[idx] = Math.abs(r - Rm) < Tm * 0.5 ? 0.92 : 0;
+    }
+  }
+  return out;
+}
+
+// 噪波：無縫 fbm 灰階（溶解遮罩 / 能量擾動圖，引擎 dissolve 直接可用）
+function generateNoiseTex(size, octaves, seed, freqScale) {
+  return normalize(fbm(size, octaves, 3, 2.0, 0.5, seed, Math.max(0.02, freqScale)));
+}
+
 
 // ============================================================
 // Generator map / labels / groups
@@ -913,6 +1174,13 @@ const GENERATORS = {
   celsmoke:   generateCelSmoke,
   rock:       generateRock,
   flame:      generateFlame,
+  shockwave:  generateShockwave,
+  muzzleflash:generateMuzzleFlash,
+  sparks:     generateSparks,
+  groundcrack:generateGroundCrack,
+  splatter:   generateSplatter,
+  inkring:    generateInkRing,
+  noisetex:   generateNoiseTex,
 };
 
 const TYPE_LABELS = [
@@ -927,15 +1195,26 @@ const TYPE_LABELS = [
   ['celsmoke',   '☁ CelSmoke   卡通煙團'],
   ['rock',       '🪨 Rock        程序化石頭'],
   ['flame',      '🔥 Flame       程序化火焰'],
+  ['shockwave',  '💫 Shockwave  衝擊波環'],
+  ['muzzleflash','🔫 MuzzleFlash 槍口火光'],
+  ['sparks',     '✨ Sparks      星形火花'],
+  ['groundcrack','🕸 GroundCrack 地裂裂紋'],
+  ['splatter',   '🩸 Splatter    飛濺液滴'],
+  ['inkring',    '⭕ InkRing     手繪墨圈'],
+  ['noisetex',   '🌫 Noise       溶解噪波'],
 ];
 const TYPE_MAP = Object.fromEntries(TYPE_LABELS);
 
 const TYPE_GROUPS = [
   { label: '打擊 Strike', keys: ['slash','bolt','crossslash','glint'] },
+  { label: '爆發 Burst',  keys: ['shockwave','muzzleflash','sparks','groundcrack'] },
   { label: '光暈 Glow',   keys: ['glow','starglow','ringglow','anamorph'] },
   { label: '煙霧 Smoke',  keys: ['celsmoke'] },
   { label: '石頭 Rock',   keys: ['rock'] },
   { label: '火焰 Fire',   keys: ['flame'] },
+  { label: '液體 Liquid', keys: ['splatter'] },
+  { label: '魔法 Magic',  keys: ['inkring'] },
+  { label: '工具 Utility',keys: ['noisetex'] },
 ];
 
 // ============================================================

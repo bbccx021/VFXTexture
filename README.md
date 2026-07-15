@@ -16,6 +16,14 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 **火焰 Fire** — Flame 程序化火焰（卡通煙團式圓滾滾團塊 + 彎曲火舌、亮核暗焰兩色調、負空間洞）
 
+**爆發 Burst** — Shockwave 衝擊波環、MuzzleFlash 槍口火光、Sparks 星形火花、GroundCrack 地裂裂紋
+
+**液體 Liquid** — Splatter 飛濺液滴（血 / 毒 / 黏液通用，配 ramp 換色）
+
+**魔法 Magic** — InkRing 手繪墨圈（debuff 圈 / 印記）
+
+**工具 Utility** — Noise 無縫溶解噪波（引擎 dissolve 遮罩直接可用）
+
 ## 功能 / Features
 
 - 10 種色彩映射：灰階 / **卡通雙色** / **卡通三色** / 金 / Plasma / 火焰 / 冰 / 電 / 毒 / 熔岩 gradient + cel mapping
