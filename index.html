@@ -86,6 +86,7 @@ input[type=number]:focus{border-color:var(--accent)}
 .preview-col{min-width:0;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;overflow:hidden}
 .panel-header{background:var(--panel);padding:6px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);flex-shrink:0}
 canvas{display:block;background:var(--surface);width:100%;aspect-ratio:1;border-radius:0;border:none}
+canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%),linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%);background-size:16px 16px;background-position:0 0,8px 8px}
 #status{color:var(--dim);font-size:12px;min-height:18px;padding:4px 0;font-family:'Consolas',monospace}
 #live-lbl{font-size:12px;color:var(--green);font-weight:600}
 .bottom{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0 3px;border-top:1px solid var(--border);margin-top:6px;flex-shrink:0}
@@ -162,6 +163,12 @@ canvas{display:block;background:var(--surface);width:100%;aspect-ratio:1;border-
           <span class="sl-val" id="zoom-val">1.00×</span>
         </div>
         <div class="radio-row" id="cmap-row" style="padding:4px 0 6px"></div>
+        <div class="radio-row" id="bg-row" style="padding:0 0 6px;align-items:center">
+          <span class="sl-lbl" data-i18n="sec_bg" style="min-width:44px">背景</span>
+          <label><input type="radio" name="bg" value="black" checked> <span data-i18n="bg_black">黑</span></label>
+          <label><input type="radio" name="bg" value="white"> <span data-i18n="bg_white">白</span></label>
+          <label><input type="radio" name="bg" value="transparent"> <span data-i18n="bg_trans">透明</span></label>
+        </div>
       </details>
 
       <details class="section" open>
@@ -203,6 +210,29 @@ canvas{display:block;background:var(--surface);width:100%;aspect-ratio:1;border-
       </details>
 
       <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_cel">手繪 / 賽璐璐</summary>
+        <div class="chk-row" style="gap:8px;padding-bottom:4px">
+          <button class="btn btn-rand" data-i18n="btn_cel_on" onclick="celPreset()">🎨 一鍵賽璐璐</button>
+          <button class="btn btn-rand" data-i18n="btn_cel_off" style="margin-left:auto" onclick="celOff()">關閉</button>
+        </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_bands">色塊階數</span>
+          <input type="range" id="cel-levels" min="1" max="8" value="1">
+          <span class="sl-val" id="cel-levels-val">—</span>
+        </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_outline">描邊</span>
+          <input type="range" id="cel-outline" min="0" max="100" value="0">
+          <span class="sl-val" id="cel-outline-val">0%</span>
+        </div>
+        <div class="sl-row" style="padding-bottom:4px">
+          <span class="sl-lbl" data-i18n="lbl_silh">外框線</span>
+          <input type="range" id="cel-silh" min="0" max="4" value="0">
+          <span class="sl-val" id="cel-silh-val">—</span>
+        </div>
+      </details>
+
+      <details class="section" open>
         <summary class="sec-hdr" data-i18n="sec_batch">批次下載</summary>
         <div class="sl-row" style="padding-bottom:2px">
           <span class="sl-lbl" data-i18n="lbl_count">數量</span>
@@ -227,15 +257,6 @@ canvas{display:block;background:var(--surface);width:100%;aspect-ratio:1;border-
       </div>
 
       <div class="thumbs">
-        <div id="tile-section" class="preview-col">
-          <div class="panel-header">
-            <span class="fold-arrow">▾</span>
-            <span style="font-size:12px;font-weight:600;color:var(--dim)" data-i18n="pv_tile">拼貼</span>
-            <span id="tile-btns" style="margin-left:auto"></span>
-          </div>
-          <canvas id="tile-canvas" width="300" height="300"></canvas>
-        </div>
-
         <div id="dissolve-section" class="preview-col">
           <div class="panel-header">
             <span class="fold-arrow">▾</span>
@@ -273,6 +294,9 @@ let LANG = (function(){ try { return localStorage.getItem('fxsprite_lang') || 'z
 const I18N = {
   sec_type:['特效類型','Effect Type'], sec_res:['解析度','Resolution'], sec_seed:['隨機種子','Random Seed'],
   sec_param:['參數調整','Parameters'], sec_post:['後處理','Post-Process'], sec_batch:['批次下載','Batch Export'],
+  sec_cel:['手繪 / 賽璐璐','Hand-drawn / Cel'],
+  btn_cel_on:['🎨 一鍵賽璐璐','🎨 Cel Preset'], btn_cel_off:['關閉','Off'],
+  lbl_bands:['色塊階數','Bands'], lbl_outline:['描邊','Outline'], lbl_silh:['外框線','Silhouette'],
   adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
   lbl_detail:['細節層','Octaves'], lbl_zoom:['縮放','Scale'], lbl_contrast:['對比','Contrast'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
@@ -281,16 +305,18 @@ const I18N = {
   btn_save:['↓ 下載 PNG','↓ Save PNG'], btn_batch:['⊞ 批次 ZIP','⊞ Batch ZIP'], btn_share:['🔗 分享連結','🔗 Share Link'],
   cm_gray:['灰階','Gray'], cm_gold:['金色','Gold'], cm_plasma:['Plasma','Plasma'],
   cm_fire:['火焰','Fire'], cm_ice:['冰','Ice'], cm_electric:['電','Electric'], cm_toxic:['毒','Toxic'], cm_magma:['熔岩','Magma'],
-  pv_tile:['拼貼','Tile'], pv_dissolve:['溶解','Dissolve'],
-  tab_live:['即時','Live'], tab_tile:['拼貼','Tile'], tab_dissolve:['溶解','Dissolve'],
-  g_strike:['打擊 Strike','Strike'], g_glow:['光暈 Glow','Glow'],
+  cm_cel2:['卡通雙色','Cel 2'], cm_cel3:['卡通三色','Cel 3'],
+  sec_bg:['背景','Background'], bg_black:['黑','Black'], bg_white:['白','White'], bg_trans:['透明','Alpha'],
+  pv_dissolve:['溶解','Dissolve'],
+  tab_live:['即時','Live'], tab_dissolve:['溶解','Dissolve'],
+  g_strike:['打擊 Strike','Strike'], g_glow:['光暈 Glow','Glow'], g_smoke:['煙霧 Smoke','Smoke'], g_rock:['石頭 Rock','Rock'], g_fire:['火焰 Fire','Fire'],
   st_ready:['就緒','Ready'], live_live:['⬤ 即時預覽','⬤ Live'],
   hotkeys:['Space 重新生成  ·  S 下載  ·  R 隨機種子','Space regen  ·  S save  ·  R reseed'],
 };
 function t(k){ const e = I18N[k]; return e ? e[LANG === 'en' ? 1 : 0] : k; }
 function typeLabelDisp(raw){ return LANG === 'en' ? raw.replace(/\s*[一-鿿].*$/, '') : raw; }
-const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow'};
-const PVTAB_I18N = {live:'tab_live',tile:'tab_tile',dissolve:'tab_dissolve'};
+const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow','煙霧 Smoke':'g_smoke','石頭 Rock':'g_rock','火焰 Fire':'g_fire'};
+const PVTAB_I18N = {live:'tab_live',dissolve:'tab_dissolve'};
 
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
@@ -669,6 +695,159 @@ function generateAnamorph(size, octaves, seed, freqScale) {
   return out;
 }
 
+// 多項式 smooth-max：把球體聯集的摺痕圓滑化，谷地變成平滑凹陷（接觸陰影的來源）
+function smax(a, b, k) {
+  const h = Math.max(0, k - Math.abs(a - b)) / k;
+  return Math.max(a, b) + h * h * k * 0.25;
+}
+
+// 共用：一組球體 → 兩色調卡通雲場
+// 用「平滑聯集高度場的表面法線」上色 → 頂部受光、下緣與球間谷地入陰影，
+// 陰影分布如真實雲團（頂亮、底暗、縫隙暗），且平滑不鋸齒
+function renderCloud(size, blobs, seed, la, wAmp) {
+  const Lz = 0.58;                                           // 光源前傾量，決定終端線高度
+  const Ln = Math.hypot(Math.cos(la), Math.sin(la), Lz) || 1;
+  const l3x = Math.cos(la) / Ln, l3y = Math.sin(la) / Ln, l3z = Lz / Ln;
+  const term = 0.30, aa = 0.07;                              // 終端線閾值 / 柔邊寬度
+  const kS = 0.035;                                          // 谷地融合半徑（接觸陰影柔度）
+  const wobX = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9e37) >>> 0, 1);   // 邊緣手繪抖動
+  const wobY = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51ab) >>> 0, 1);
+  const N = size * size;
+  // 1) 平滑聯集高度場（smooth-max，球間谷地圓滑不產生尖銳摺痕）
+  const H = new Float32Array(N);
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const px = i / size + (wobX[idx] - 0.5) * wAmp;
+      const py = j / size + (wobY[idx] - 0.5) * wAmp;
+      let h = 0;
+      for (let b = 0; b < blobs.length; b++) {
+        const dx = px - blobs[b].x, dy = py - blobs[b].y;
+        const r = blobs[b].r, d2 = dx * dx + dy * dy;
+        if (d2 < r * r) h = smax(h, Math.sqrt(r * r - d2), kS);
+      }
+      H[idx] = h;
+    }
+  }
+  // 2) 由高度場梯度求表面法線 → 兩色調終端線
+  const out = new Float32Array(N);
+  const g = size * 0.5;                                      // 中央差分係數
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const h = H[idx];
+      if (h <= 1e-4) { out[idx] = 0; continue; }
+      const xm = i > 0 ? idx - 1 : idx, xp = i < size - 1 ? idx + 1 : idx;
+      const ym = j > 0 ? idx - size : idx, yp = j < size - 1 ? idx + size : idx;
+      const Hx = (H[xp] - H[xm]) * g, Hy = (H[yp] - H[ym]) * g;
+      const nl = (-Hx * l3x - Hy * l3y + l3z) / Math.sqrt(Hx * Hx + Hy * Hy + 1);
+      const lit = sstep(term - aa, term + aa, nl);           // 終端線平滑過渡
+      const tone = 0.55 + 0.40 * lit;                        // 陰影 0.55 → 亮面 0.95
+      out[idx] = tone * Math.min(1, h / 0.015);              // 邊緣抗鋸齒
+    }
+  }
+  return out;
+}
+
+function generateCelSmoke(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 1013904223 + 7) >>> 0 || 1);
+  const k = Math.max(0.5, Math.min(1.6, freqScale));
+  const nBlobs = Math.min(9, 3 + Math.round(octaves / 2));   // octaves 控制團塊數
+  const blobs = [{ x: 0.5 + (rng.rand() - 0.5) * 0.06, y: 0.56 + (rng.rand() - 0.5) * 0.05, r: 0.21 * k }];
+  for (let b = 1; b < nBlobs; b++) {
+    const a = rng.rand() * Math.PI * 2;
+    const d = 0.10 + rng.rand() * 0.13;
+    const x = 0.5 + Math.cos(a) * d;
+    const y = 0.54 + Math.sin(a) * d * 0.8;
+    const up = 1 - (y - 0.3) / 0.5;                          // 越上面的球越小
+    blobs.push({ x, y, r: Math.max(0.06 * k, (0.09 + rng.rand() * 0.09) * k * (0.8 + 0.4 * up)) });
+  }
+  const la = -1.95 + (rng.rand() - 0.5) * 0.3;               // 光源：偏上、微左（參考圖分布）
+  return renderCloud(size, blobs, seed, la, 0.032);
+}
+
+// 程序化石頭：有稜有角的巨石輪廓 + 三調卡通面（頂亮 / 中 / 底暗），底部略平坐地
+// 搭配 cel3 調色最佳
+function generateRock(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 374761393 + 5) >>> 0 || 1); rng.next();
+  const k = Math.max(0.55, Math.min(1.5, freqScale));
+  const cx = 0.5, cy = 0.50, R0 = 0.30 * k, aspect = 1.20;   // 偏寬
+  const nH = 3 + (octaves % 4);
+  const H = [];
+  for (let h = 0; h < nH; h++) H.push({ f: 2 + h, a: (0.06 + rng.rand() * 0.11) / (h * 0.6 + 1), p: rng.rand() * Math.PI * 2 });
+  const la = -2.30 + (rng.rand() - 0.5) * 0.25, Lz = 0.55;   // 光源左上
+  const Ln = Math.hypot(Math.cos(la), Math.sin(la), Lz) || 1;
+  const l3x = Math.cos(la) / Ln, l3y = Math.sin(la) / Ln, l3z = Lz / Ln;
+  const t1 = 0.10, t2 = 0.52;                                // 三調終端線
+  const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x77) >>> 0, 1);
+  const groundY = cy + R0 * 0.66;                            // 底部裁平
+  const eAA = 0.02 * k;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const yy = j / size;
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const dx = i / size - cx, dy = (yy - cy) / aspect;
+      const a = Math.atan2(dy, dx), r = Math.hypot(dx, dy);
+      let Rm = R0;
+      for (const h of H) Rm += R0 * h.a * Math.cos(h.f * a + h.p);
+      Rm *= 0.92 + (wob[idx] - 0.5) * 0.12;                  // 手繪抖動
+      if (r >= Rm || yy > groundY) { out[idx] = 0; continue; }
+      const nrm = r / Rm, hh = Math.sqrt(Math.max(0, 1 - nrm * nrm));
+      const ndotl = (dx / Rm) * l3x + (dy / Rm) * l3y + hh * l3z;
+      const tone = ndotl > t2 ? 0.92 : ndotl > t1 ? 0.58 : 0.26;
+      const cov = Math.min(1, (Rm - r) / eAA, (groundY - yy) / 0.02);
+      out[idx] = tone * Math.max(0, cov);
+    }
+  }
+  return out;
+}
+
+// 程序化火焰：由下往上堆疊縮小的團塊 → 圓潤火焰輪廓，內深處為亮核、外緣為暗焰，帶負空間洞
+// 搭配 fire / magma / cel2 調色最佳
+function generateFlame(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 2654435761 + 23) >>> 0 || 1); rng.next();
+  const k = Math.max(0.6, Math.min(1.5, freqScale));
+  const cx = 0.5, blobs = [];
+  const n = 4 + Math.round(octaves / 3);
+  for (let b = 0; b < n; b++) {
+    const tt = b / (n - 1);                                  // 0底 → 1頂
+    const x = cx + (rng.rand() - 0.5) * 0.18 * tt;           // 頂端左右擺動
+    const y = 0.80 - tt * 0.60;
+    const r = (0.17 - tt * 0.11) * k * (0.85 + rng.rand() * 0.3);
+    blobs.push({ x, y, r: Math.max(0.03 * k, r) });
+  }
+  const holes = [];
+  const nHoles = 1 + Math.round(rng.rand() * 2);
+  for (let h = 0; h < nHoles; h++)
+    holes.push({ x: cx + (rng.rand() - 0.5) * 0.18, y: 0.38 + rng.rand() * 0.30, r: (0.028 + rng.rand() * 0.04) * k });
+  function heightAt(px, py) {
+    let h = 0;
+    for (const b of blobs) {
+      const dx = px - b.x, dy = py - b.y, d2 = dx * dx + dy * dy;
+      if (d2 < b.r * b.r) { const hv = Math.sqrt(b.r * b.r - d2) / b.r; if (hv > h) h = hv; }
+    }
+    return h;
+  }
+  const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x33) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const px = i / size + (wob[idx] - 0.5) * 0.03, py = j / size;
+      const h = heightAt(px, py);
+      if (h <= 0) { out[idx] = 0; continue; }
+      let inHole = false;
+      for (const ho of holes) { const dx = px - ho.x, dy = py - ho.y; if (dx * dx + dy * dy < ho.r * ho.r) { inHole = true; break; } }
+      if (inHole) { out[idx] = 0; continue; }
+      const tone = h > 0.55 ? 0.92 : 0.58;                   // 深處亮核 / 外緣暗焰
+      out[idx] = tone * Math.min(1, h / 0.12);               // 邊緣 AA
+    }
+  }
+  return out;
+}
+
+
 // ============================================================
 // Generator map / labels / groups
 // ============================================================
@@ -681,6 +860,9 @@ const GENERATORS = {
   starglow:   generateStarGlow,
   ringglow:   generateRingGlow,
   anamorph:   generateAnamorph,
+  celsmoke:   generateCelSmoke,
+  rock:       generateRock,
+  flame:      generateFlame,
 };
 
 const TYPE_LABELS = [
@@ -692,12 +874,18 @@ const TYPE_LABELS = [
   ['starglow',   '✦ StarGlow    星芒光暈'],
   ['ringglow',   '◎ RingGlow    光環光暈'],
   ['anamorph',   '➖ Anamorphic 橫向光斑'],
+  ['celsmoke',   '☁ CelSmoke   卡通煙團'],
+  ['rock',       '🪨 Rock        程序化石頭'],
+  ['flame',      '🔥 Flame       程序化火焰'],
 ];
 const TYPE_MAP = Object.fromEntries(TYPE_LABELS);
 
 const TYPE_GROUPS = [
   { label: '打擊 Strike', keys: ['slash','bolt','crossslash','glint'] },
   { label: '光暈 Glow',   keys: ['glow','starglow','ringglow','anamorph'] },
+  { label: '煙霧 Smoke',  keys: ['celsmoke'] },
+  { label: '石頭 Rock',   keys: ['rock'] },
+  { label: '火焰 Fire',   keys: ['flame'] },
 ];
 
 // ============================================================
@@ -706,10 +894,10 @@ const TYPE_GROUPS = [
 let currentType = 'slash';
 let lastArr = null;
 let lastOut = null;
-let tileCount = 2;
 let debounceId = null;
 let isGenerating = false;
 const PREVIEW_CALC = 256;
+const PREVIEW_SS = 2;                 // 預覽超取樣倍率（消除 cel 邊緣鋸齒）
 
 function getParams() {
   return {
@@ -727,6 +915,9 @@ function getParams() {
     levHi:     parseInt(document.getElementById('lev-hi').value) / 100,
     count:     parseInt(document.getElementById('count').value) || 5,
     allTypes:  document.getElementById('all-types').checked,
+    celLevels: parseInt(document.getElementById('cel-levels').value),
+    celOutline:parseInt(document.getElementById('cel-outline').value) / 100,
+    celSilh:   parseInt(document.getElementById('cel-silh').value),
   };
 }
 
@@ -767,6 +958,71 @@ function postprocess(arr, gamma=1.0, invert=false, brightness=0.0, contrast=1.0,
   return out;
 }
 
+// ============================================================
+// 手繪 / 賽璐璐 — 空間處理（posterize + 描邊 + 外框線）
+// ============================================================
+function celShade(arr, size, levels, outline, silh) {
+  const N = arr.length;
+  // 1. Posterize — 量化成 N 階平色塊
+  let field = arr;
+  if (levels >= 2) {
+    field = new Float32Array(N);
+    const L = levels - 1;
+    for (let i = 0; i < N; i++) field[i] = Math.round(arr[i] * L) / L;
+  }
+  const out = new Float32Array(N);
+  // 2. Ink outline — 對量化後的場做鄰點梯度，band 邊界壓暗成線稿
+  if (outline > 0) {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = y * size + x;
+        const xm = x > 0 ? i - 1 : i, xp = x < size - 1 ? i + 1 : i;
+        const ym = y > 0 ? i - size : i, yp = y < size - 1 ? i + size : i;
+        const gx = field[xp] - field[xm];
+        const gy = field[yp] - field[ym];
+        const g = Math.sqrt(gx * gx + gy * gy);
+        const e = sstep(0.02, 0.14, g);                 // 邊緣強度 0..1
+        out[i] = field[i] * (1 - e * outline);
+      }
+    }
+  } else {
+    out.set(field);
+  }
+  // 3. Silhouette — 外框線：前景輪廓內緣 w px 壓黑（日系深色描邊）
+  if (silh > 0) {
+    const w = Math.max(1, Math.round(silh * size / 256));   // 線寬隨解析度縮放
+    const w2 = w * w, thr = 0.10;
+    const src = out.slice();
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = y * size + x;
+        if (src[i] <= thr) continue;                        // 背景略過
+        let edge = false;
+        for (let dy = -w; dy <= w && !edge; dy++) {
+          const yy = y + dy;
+          for (let dx = -w; dx <= w; dx++) {
+            if (dx * dx + dy * dy > w2) continue;
+            const xx = x + dx;
+            // 邊界外或碰到背景 → 此像素靠近 silhouette → 壓黑成外框
+            if (xx < 0 || yy < 0 || xx >= size || yy >= size || src[yy * size + xx] <= thr) { edge = true; break; }
+          }
+        }
+        if (edge) out[i] = 0;
+      }
+    }
+  }
+  return out;
+}
+
+// tone 後處理 + 賽璐璐，供預覽 / 下載 / 批次共用
+function finalizeField(arr, size, p) {
+  let out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
+  if (p.celLevels > 1 || p.celOutline > 0 || p.celSilh > 0) {
+    out = celShade(out, size, p.celLevels, p.celOutline, p.celSilh);
+  }
+  return out;
+}
+
 function autoLevels() {
   if (!lastArr) return;
   let lo = 1, hi = 0;
@@ -782,6 +1038,25 @@ function autoLevels() {
   document.getElementById('lev-hi-val').textContent = (hiV / 100).toFixed(2);
   setStatus(`⚡ ${(loV/100).toFixed(2)} ~ ${(hiV/100).toFixed(2)} → 0 ~ 1`, 'var(--green)');
   renderTilePreview();
+}
+
+function setCel(levels, outline, silh) {
+  document.getElementById('cel-levels').value = levels;
+  document.getElementById('cel-outline').value = outline;
+  document.getElementById('cel-silh').value = silh;
+  document.getElementById('cel-levels-val').textContent = levels <= 1 ? '—' : levels;
+  document.getElementById('cel-outline-val').textContent = outline + '%';
+  document.getElementById('cel-silh-val').textContent = silh <= 0 ? '—' : silh + 'px';
+}
+function celPreset() {
+  setCel(4, 45, 2);
+  setStatus(LANG === 'en' ? '🎨 Cel preset applied' : '🎨 賽璐璐已套用', 'var(--green)');
+  if (lastArr) renderTilePreview();
+}
+function celOff() {
+  setCel(1, 0, 0);
+  setStatus(t('st_ready'), 'var(--dim)');
+  if (lastArr) renderTilePreview();
 }
 
 function resetPost() {
@@ -822,39 +1097,76 @@ function rampLookup(ramp, g) {
   const last = ramp[ramp.length - 1]; return [last[1], last[2], last[3]];
 }
 
+// 卡通平色調色盤（cel colormap）
+const CEL2 = { shadow:[110,124,156], light:[242,240,230] };                 // 卡通雙色：藍灰 / 米白
+const CEL3 = { dark:[76,84,110], mid:[150,156,170], light:[238,236,228] };  // 卡通三色：暗 / 中 / 亮
+
+function colorAt(colormap, v) {
+  v = v < 0 ? 0 : v > 1 ? 1 : v;
+  if (colormap === 'cel2') return v < 0.60 ? CEL2.shadow : CEL2.light;
+  if (colormap === 'cel3') return v < 0.40 ? CEL3.dark : v < 0.72 ? CEL3.mid : CEL3.light;
+  if (VFX_RAMPS[colormap]) return rampLookup(VFX_RAMPS[colormap], v);
+  if (colormap === 'gold') return [
+    Math.pow(v,0.55)*255, Math.pow(Math.min(1,v*0.78),0.75)*255, Math.pow(Math.min(1,v*0.18),1.50)*255];
+  if (colormap === 'plasma') return [
+    Math.pow(Math.min(1,v*1.20),0.80)*255, Math.pow(Math.min(1,v*0.40),1.50)*255, Math.pow(Math.min(1,v*1.50),0.60)*255];
+  const g = v*255; return [g,g,g];
+}
+
+function getBgMode() {
+  const r = document.querySelector('input[name=bg]:checked');
+  return r ? r.value : 'black';
+}
+
+// 背景模式：黑（原樣）/ 白（襯白）/ 透明（alpha=覆蓋率）
+// cel 平色調用形狀遮罩當覆蓋率；漸層調用亮度本身
 function applyColormap(arr, colormap) {
   const N = arr.length, out = new Uint8ClampedArray(N*4);
-  if (VFX_RAMPS[colormap]) {
-    const ramp = VFX_RAMPS[colormap];
-    for (let i = 0; i < N; i++) {
-      const c = rampLookup(ramp, arr[i]);
-      out[i*4] = c[0]; out[i*4+1] = c[1]; out[i*4+2] = c[2]; out[i*4+3] = 255;
-    }
-    return out;
-  }
-  if (colormap === 'gold') {
-    for (let i = 0; i < N; i++) {
-      const g = arr[i];
-      out[i*4]   = Math.round(Math.pow(Math.max(0,Math.min(1,g)),     0.55)*255);
-      out[i*4+1] = Math.round(Math.pow(Math.max(0,Math.min(1,g*0.78)),0.75)*255);
-      out[i*4+2] = Math.round(Math.pow(Math.max(0,Math.min(1,g*0.18)),1.50)*255);
-      out[i*4+3] = 255;
-    }
-  } else if (colormap === 'plasma') {
-    for (let i = 0; i < N; i++) {
-      const g = arr[i];
-      out[i*4]   = Math.round(Math.pow(Math.max(0,Math.min(1,g*1.20)),0.80)*255);
-      out[i*4+1] = Math.round(Math.pow(Math.max(0,Math.min(1,g*0.40)),1.50)*255);
-      out[i*4+2] = Math.round(Math.pow(Math.max(0,Math.min(1,g*1.50)),0.60)*255);
-      out[i*4+3] = 255;
-    }
-  } else {
-    for (let i = 0; i < N; i++) {
-      const v = Math.round(arr[i]*255);
-      out[i*4]=v; out[i*4+1]=v; out[i*4+2]=v; out[i*4+3]=255;
+  const bg = getBgMode();
+  const isCel = colormap === 'cel2' || colormap === 'cel3';
+  for (let i = 0; i < N; i++) {
+    const v = arr[i];
+    const c = colorAt(colormap, v);
+    const cov = isCel ? sstep(0.03, 0.18, v) : (v < 0 ? 0 : v > 1 ? 1 : v);
+    const o = i * 4;
+    if (bg === 'white') {
+      const iw = 255 * (1 - cov);
+      out[o] = c[0]*cov + iw; out[o+1] = c[1]*cov + iw; out[o+2] = c[2]*cov + iw; out[o+3] = 255;
+    } else if (bg === 'transparent') {
+      out[o] = c[0]; out[o+1] = c[1]; out[o+2] = c[2]; out[o+3] = 255 * cov;
+    } else {                                              // black
+      const m = isCel ? cov : 1;
+      out[o] = c[0]*m; out[o+1] = c[1]*m; out[o+2] = c[2]*m; out[o+3] = 255;
     }
   }
   return out;
+}
+
+// ============================================================
+// 超取樣抗鋸齒 — 以 2× 計算 cel 場再盒式降採樣，補回色階/描邊被砍掉的邊緣 AA
+// ============================================================
+function downsampleField(src, big, size) {
+  const ss = big / size, out = new Float32Array(size * size), inv = 1 / (ss * ss);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let s = 0;
+      for (let dy = 0; dy < ss; dy++) {
+        const row = (y * ss + dy) * big + x * ss;
+        for (let dx = 0; dx < ss; dx++) s += src[row + dx];
+      }
+      out[y * size + x] = s * inv;
+    }
+  }
+  return out;
+}
+
+// 產生最終場（cel 開啟時走 2× 超取樣），供下載 / 批次共用
+function computeFinal(type, size, octaves, seed, freqScale, p) {
+  const cel = p.celLevels > 1 || p.celOutline > 0 || p.celSilh > 0;
+  const SS = cel ? 2 : 1, big = size * SS;
+  const arr = GENERATORS[type](big, octaves, seed, freqScale);
+  const fin = finalizeField(arr, big, p);
+  return SS > 1 ? downsampleField(fin, big, size) : fin;
 }
 
 // ============================================================
@@ -876,19 +1188,6 @@ function renderToCanvas(canvas, arr, size, colormap) {
   ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
 }
 
-function renderTiledCanvas(canvas, arr, size, tiles, colormap) {
-  const ctx = canvas.getContext('2d');
-  const tmp = document.createElement('canvas');
-  tmp.width = size; tmp.height = size;
-  tmp.getContext('2d').putImageData(arrToImageData(tmp.getContext('2d'), arr, size, colormap), 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.imageSmoothingQuality = 'high';
-  const cell = canvas.width / tiles;
-  for (let ty = 0; ty < tiles; ty++)
-    for (let tx = 0; tx < tiles; tx++)
-      ctx.drawImage(tmp, tx*cell, ty*cell, cell, cell);
-}
-
 // ============================================================
 // Preview pipeline
 // ============================================================
@@ -905,7 +1204,7 @@ function runPreview() {
   setLive('⬤ …', 'var(--accent)');
   setTimeout(() => {
     try {
-      lastArr = GENERATORS[p.type](PREVIEW_CALC, p.octaves, p.seed, p.freqScale);
+      lastArr = GENERATORS[p.type](PREVIEW_CALC * PREVIEW_SS, p.octaves, p.seed, p.freqScale);
       renderTilePreview();
       setLive(t('live_live'), 'var(--green)');
       setStatus(`${p.type}  ${p.size}×${p.size}  seed=${p.seed}  oct=${p.octaves}  ×${p.freqScale.toFixed(2)}`, 'var(--green)');
@@ -919,10 +1218,11 @@ function runPreview() {
 function renderTilePreview() {
   if (!lastArr) return;
   const p = getParams();
-  const out = postprocess(lastArr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
+  const big = PREVIEW_CALC * PREVIEW_SS;
+  const finBig = finalizeField(lastArr, big, p);          // cel 在 2× 空間處理
+  const out = downsampleField(finBig, big, PREVIEW_CALC);  // 降採樣補回邊緣 AA
   lastOut = out;
   renderToCanvas(document.getElementById('preview'), out, PREVIEW_CALC, p.colormap);
-  renderTiledCanvas(document.getElementById('tile-canvas'), out, PREVIEW_CALC, tileCount, p.colormap);
   renderDissolve();
   renderHistogram();
 }
@@ -1019,8 +1319,7 @@ function saveSingle() {
   setTimeout(async () => {
     try {
       const name = `${p.type}_${p.size}_${String(p.seed).padStart(4,'0')}.png`;
-      const arr = GENERATORS[p.type](p.size, p.octaves, p.seed, p.freqScale);
-      const out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
+      const out = computeFinal(p.type, p.size, p.octaves, p.seed, p.freqScale, p);
       const canvas = arrToExportCanvas(out, p.size, p.colormap);
       const blob = await canvasToBlob(canvas);
       downloadBlob(blob, name);
@@ -1051,8 +1350,7 @@ async function batchGenerate() {
       setProgress(done / total * 100);
       await new Promise(r => setTimeout(r, 0));
       try {
-        const arr = GENERATORS[type](p.size, p.octaves, seed, p.freqScale);
-        const out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
+        const out = computeFinal(type, p.size, p.octaves, seed, p.freqScale, p);
         const canvas = arrToExportCanvas(out, p.size, p.colormap);
         if (zip) {
           const blob = await canvasToBlob(canvas);
@@ -1090,6 +1388,9 @@ function shareURL() {
     llo: document.getElementById('lev-lo').value,
     lhi: document.getElementById('lev-hi').value,
     inv: p.invert ? 1 : 0,
+    cl: document.getElementById('cel-levels').value,
+    co: document.getElementById('cel-outline').value,
+    cs: document.getElementById('cel-silh').value,
   });
   const url = location.origin + location.pathname + '?' + q.toString();
   const done = () => setStatus('🔗 copied', 'var(--green)');
@@ -1155,6 +1456,9 @@ function applyParamsFromURL() {
     document.getElementById('lev-hi-val').textContent = (q.get('lhi')/100).toFixed(2);
   }
   if (q.get('inv') === '1') document.getElementById('invert').checked = true;
+  if (q.get('cl') || q.get('co') || q.get('cs')) {
+    setCel(parseInt(q.get('cl')) || 1, parseInt(q.get('co')) || 0, parseInt(q.get('cs')) || 0);
+  }
 }
 
 // ============================================================
@@ -1183,7 +1487,7 @@ function buildCmapRadios() {
   const cr = document.getElementById('cmap-row');
   const cur = document.querySelector('input[name=cmap]:checked')?.value || 'gray';
   cr.innerHTML = '';
-  [['gray','cm_gray'],['gold','cm_gold'],['plasma','cm_plasma'],['fire','cm_fire'],
+  [['gray','cm_gray'],['cel2','cm_cel2'],['cel3','cm_cel3'],['gold','cm_gold'],['plasma','cm_plasma'],['fire','cm_fire'],
    ['ice','cm_ice'],['electric','cm_electric'],['toxic','cm_toxic'],['magma','cm_magma']].forEach(([v, k]) => {
     const lbl = document.createElement('label');
     const r = document.createElement('input');
@@ -1211,21 +1515,6 @@ function buildUI() {
   });
 
   buildCmapRadios();
-
-  // Tile buttons
-  const tb = document.getElementById('tile-btns');
-  [1,2,4].forEach(n => {
-    const btn = document.createElement('button');
-    btn.className = 'tile-btn' + (n===2?' active':'');
-    btn.textContent = `${n}×${n}`;
-    btn.addEventListener('click', () => {
-      tileCount = n;
-      document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      if (lastArr) renderTilePreview();
-    });
-    tb.appendChild(btn);
-  });
 
   // Slider listeners
   document.getElementById('octaves').addEventListener('input', e => {
@@ -1270,6 +1559,25 @@ function buildUI() {
     if (lastArr) renderTilePreview();
   });
   document.getElementById('invert').addEventListener('change', () => { if (lastArr) renderTilePreview(); });
+  document.getElementById('cel-levels').addEventListener('input', e => {
+    const v = parseInt(e.target.value);
+    document.getElementById('cel-levels-val').textContent = v <= 1 ? '—' : v;
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('cel-outline').addEventListener('input', e => {
+    document.getElementById('cel-outline-val').textContent = e.target.value + '%';
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('cel-silh').addEventListener('input', e => {
+    const v = parseInt(e.target.value);
+    document.getElementById('cel-silh-val').textContent = v <= 0 ? '—' : v + 'px';
+    if (lastArr) renderTilePreview();
+  });
+  document.querySelectorAll('input[name=bg]').forEach(r =>
+    r.addEventListener('change', () => {
+      document.getElementById('preview').classList.toggle('checker', getBgMode() === 'transparent');
+      if (lastArr) renderTilePreview();
+    }));
   document.getElementById('seed').addEventListener('input', schedulePreview);
   document.getElementById('dissolve-t').addEventListener('input', e => {
     document.getElementById('dissolve-t-val').textContent = e.target.value + '%';
@@ -1304,7 +1612,7 @@ document.addEventListener('keydown', e => {
 // Canvas size sync + mobile preview tabs
 // ============================================================
 function syncCanvasSizes() {
-  ['preview','tile-canvas','dissolve-canvas'].forEach(id => {
+  ['preview','dissolve-canvas'].forEach(id => {
     const c = document.getElementById(id);
     const w = c.offsetWidth;
     if (w > 0 && (c.width !== w || c.height !== w)) {
@@ -1317,7 +1625,6 @@ function syncCanvasSizes() {
 let previewTab = 'live';
 const PREVIEW_TAB_DEFS = [
   { id: 'live',     label: '即時' },
-  { id: 'tile',     label: '拼貼',  sec: 'tile-section' },
   { id: 'dissolve', label: '溶解',  sec: 'dissolve-section' },
 ];
 
@@ -1337,7 +1644,7 @@ function applyPreviewTab() {
   buildPreviewTabs();
   const main = document.getElementById('main-panel');
   const thumbs = document.querySelector('.thumbs');
-  const secs = { tile: 'tile-section', dissolve: 'dissolve-section' };
+  const secs = { dissolve: 'dissolve-section' };
   if (window.innerWidth > 640) {
     main.style.display = '';
     thumbs.style.display = '';
