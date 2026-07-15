@@ -14,7 +14,7 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 **石頭 Rock** — Rock 程序化石頭（不規則多邊形硬邊輪廓、低多邊形平面刻面、頂部亮面）
 
-**火焰 Fire** — Flame 程序化火焰（寬圓潤多瓣身體 + 雙尖火舌、自帶尖端的內焰亮部、負空間洞 —— 經典卡通兩層火）
+**火焰 Fire** — Flame 程序化火焰（寬圓潤多瓣身體 + 雙尖火舌，與卡通煙團同一套球面法線立體著色，黑色缺口數量／大小可用滑桿調整）
 
 **爆發 Burst** — Shockwave 衝擊波環、MuzzleFlash 槍口火光、Sparks 星形火花、GroundCrack 地裂裂紋
 

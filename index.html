@@ -162,6 +162,11 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
           <input type="range" id="zoom" min="1" max="400" value="100">
           <span class="sl-val" id="zoom-val">1.00×</span>
         </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_fhole">火焰缺口</span>
+          <input type="range" id="flame-hole" min="0" max="100" value="50">
+          <span class="sl-val" id="flame-hole-val">50%</span>
+        </div>
         <div class="radio-row" id="cmap-row" style="padding:4px 0 6px"></div>
         <div class="radio-row" id="bg-row" style="padding:0 0 6px;align-items:center">
           <span class="sl-lbl" data-i18n="sec_bg" style="min-width:44px">背景</span>
@@ -319,7 +324,7 @@ const I18N = {
   adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
   lbl_detail:['細節層','Octaves'], lbl_zoom:['縮放','Scale'], lbl_contrast:['對比','Contrast'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
-  lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'],
+  lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'], lbl_fhole:['火焰缺口','Flame holes'],
   chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
   btn_rand:['🎲 隨機','🎲 Random'], btn_auto:['⚡ 自動色階','⚡ Auto Levels'], btn_reset:['重設','Reset'],
   btn_save:['↓ 下載 PNG','↓ Save PNG'], btn_batch:['⊞ 批次 ZIP','⊞ Batch ZIP'], btn_share:['🔗 分享連結','🔗 Share Link'],
@@ -722,10 +727,10 @@ function smax(a, b, k) {
   return Math.max(a, b) + h * h * k * 0.25;
 }
 
-// 共用：一組球體 → 兩色調卡通雲場
+// 共用：一組球體 → 兩色調卡通雲場（holes 為可選負空間缺口，洞緣自帶陰影圈）
 // 用「平滑聯集高度場的表面法線」上色 → 頂部受光、下緣與球間谷地入陰影，
 // 陰影分布如真實雲團（頂亮、底暗、縫隙暗），且平滑不鋸齒
-function renderCloud(size, blobs, seed, la, wAmp) {
+function renderCloud(size, blobs, seed, la, wAmp, holes) {
   const Lz = 0.58;                                           // 光源前傾量，決定終端線高度
   const Ln = Math.hypot(Math.cos(la), Math.sin(la), Lz) || 1;
   const l3x = Math.cos(la) / Ln, l3y = Math.sin(la) / Ln, l3z = Lz / Ln;
@@ -746,6 +751,13 @@ function renderCloud(size, blobs, seed, la, wAmp) {
         const dx = px - blobs[b].x, dy = py - blobs[b].y;
         const r = blobs[b].r, d2 = dx * dx + dy * dy;
         if (d2 < r * r) h = smax(h, Math.sqrt(r * r - d2), kS);
+      }
+      // 負空間缺口：挖掉高度 → pass 2 梯度自動在洞緣形成陰影圈（立體感）
+      if (holes && h > 0) {
+        for (let o = 0; o < holes.length; o++) {
+          const dx = px - holes[o].x, dy = py - holes[o].y;
+          if (dx * dx + dy * dy < holes[o].r * holes[o].r) { h = 0; break; }
+        }
       }
       H[idx] = h;
     }
@@ -850,7 +862,7 @@ function generateRock(size, octaves, seed, freqScale) {
 
 // 程序化火焰：卡通煙團式圓滾滾團塊 + 往上竄的火舌鏈（不規則元素），光源從下方 → 底亮頂暗
 // 搭配 fire / cel2 調色最佳
-function generateFlame(size, octaves, seed, freqScale) {
+function generateFlame(size, octaves, seed, freqScale, p) {
   const rng = new RNG((seed * 2654435761 + 23) >>> 0 || 1); rng.next();
   const k = Math.max(0.02, Math.min(1.6, freqScale));
   const cx = 0.5 + (rng.rand() - 0.5) * 0.02;
@@ -882,40 +894,21 @@ function generateFlame(size, octaves, seed, freqScale) {
     blobs.push({ x: sx, y: sy, r: sr });
     sx -= dir * sr * 0.35; sy -= sr * 0.80; sr *= 0.68;
   }
-  // 內焰：外焰縮小 62%、錨定在底部中心 → 自帶火舌尖的內層形狀（經典卡通兩色調）
-  const ax = cx, ay = 0.76;
-  const core = blobs.map(b => ({ x: ax + (b.x - ax) * 0.62, y: ay + (b.y - ay) * 0.62, r: b.r * 0.55 }));
-  // 負空間洞：外焰內、內焰外的縫隙處
+  // 負空間缺口：數量與大小由使用者「火焰缺口」滑桿控制（0 = 無）
+  // 注意：缺口的隨機數放在最後抽 → 拖滑桿時火焰本體形狀不變
+  const amt = p && typeof p.holeAmt === 'number' ? p.holeAmt : 0.5;
   const holes = [];
-  if (rng.rand() > 0.3)
-    holes.push({ x: cx + dir * (0.09 + rng.rand() * 0.04) * k, y: 0.60 + (rng.rand() - 0.5) * 0.06, r: (0.022 + rng.rand() * 0.022) * k });
-  const wobX = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9e37) >>> 0, 1);
-  const wobY = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51ab) >>> 0, 1);
-  function hitN(list, qx, qy) {
-    let h = 0;
-    for (const b of list) {
-      const dx = qx - b.x, dy = qy - b.y, d2 = dx * dx + dy * dy;
-      if (d2 < b.r * b.r) { const hv = Math.sqrt(1 - d2 / (b.r * b.r)); if (hv > h) h = hv; }
-    }
-    return h;
+  const nHo = Math.round(amt * 3);                           // 0..3 個
+  for (let hI = 0; hI < nHo; hI++) {
+    holes.push({
+      x: cx + (hI === 0 ? dir : (rng.rand() < 0.5 ? -1 : 1)) * (0.05 + rng.rand() * 0.07) * k,
+      y: 0.57 + (rng.rand() - 0.5) * 0.14,
+      r: (0.016 + rng.rand() * 0.018) * (0.5 + amt * 1.3) * k,   // 越大格越大洞
+    });
   }
-  const out = new Float32Array(size * size);
-  for (let j = 0; j < size; j++) {
-    for (let i = 0; i < size; i++) {
-      const idx = j * size + i;
-      const qx = i / size + (wobX[idx] - 0.5) * 0.032;
-      const qy = j / size + (wobY[idx] - 0.5) * 0.032;
-      const hN = hitN(blobs, qx, qy);
-      if (hN <= 0) { out[idx] = 0; continue; }
-      let inHole = false;
-      for (const ho of holes) { const dx = qx - ho.x, dy = qy - ho.y; if (dx * dx + dy * dy < ho.r * ho.r) { inHole = true; break; } }
-      if (inHole) { out[idx] = 0; continue; }
-      // 內焰形狀決定亮部（自帶尖端） / 其餘為暗焰
-      const tone = hitN(core, qx, qy) > 0.12 ? 0.95 : 0.58;
-      out[idx] = tone * Math.min(1, hN / 0.10);              // 邊緣 AA
-    }
-  }
-  return out;
+  // 與卡通煙團同一套著色（同光源方位、同兩色調、同手繪抖動）→ 立體感與風格一致
+  const la = -1.95 + (rng.rand() - 0.5) * 0.3;
+  return renderCloud(size, blobs, seed, la, 0.032, holes);
 }
 
 // 衝擊波：亮環（前緣銳利）+ 內側拖尾，環半徑帶角度諧波不規則
@@ -1262,6 +1255,7 @@ function getParams() {
     celRough:  parseInt(document.getElementById('cel-rough').value) / 100,
     glowStr:   parseInt(document.getElementById('glow-str').value) / 100,
     glowRad:   parseInt(document.getElementById('glow-rad').value),
+    holeAmt:   parseInt(document.getElementById('flame-hole').value) / 100,
   };
 }
 
@@ -1581,7 +1575,7 @@ function downsampleField(src, big, size) {
 // 產生最終場（cel 開啟時走 2× 超取樣），供下載 / 批次共用
 function computeFinal(type, size, octaves, seed, freqScale, p) {
   const SS = celActive(p) ? 2 : 1, big = size * SS;
-  const arr = GENERATORS[type](big, octaves, seed, freqScale);
+  const arr = GENERATORS[type](big, octaves, seed, freqScale, p);
   const fin = finalizeField(arr, big, { ...p, seed });
   return SS > 1 ? downsampleField(fin, big, size) : fin;
 }
@@ -1621,7 +1615,7 @@ function runPreview() {
   setLive('⬤ …', 'var(--accent)');
   setTimeout(() => {
     try {
-      lastArr = GENERATORS[p.type](PREVIEW_CALC * PREVIEW_SS, p.octaves, p.seed, p.freqScale);
+      lastArr = GENERATORS[p.type](PREVIEW_CALC * PREVIEW_SS, p.octaves, p.seed, p.freqScale, p);
       renderTilePreview();
       setLive(t('live_live'), 'var(--green)');
       setStatus(`${p.type}  ${p.size}×${p.size}  seed=${p.seed}  oct=${p.octaves}  ×${p.freqScale.toFixed(2)}`, 'var(--green)');
@@ -1811,6 +1805,7 @@ function shareURL() {
     cr: document.getElementById('cel-rough').value,
     gs: document.getElementById('glow-str').value,
     gr: document.getElementById('glow-rad').value,
+    fh: document.getElementById('flame-hole').value,
   });
   const url = location.origin + location.pathname + '?' + q.toString();
   const done = () => setStatus('🔗 copied', 'var(--green)');
@@ -1887,6 +1882,10 @@ function applyParamsFromURL() {
     document.getElementById('glow-rad').value = parseInt(q.get('gr')) || 8;
     document.getElementById('glow-rad-val').textContent = parseInt(q.get('gr')) || 8;
   }
+  if (q.get('fh') !== null) {
+    document.getElementById('flame-hole').value = parseInt(q.get('fh')) || 0;
+    document.getElementById('flame-hole-val').textContent = (parseInt(q.get('fh')) || 0) + '%';
+  }
 }
 
 // ============================================================
@@ -1951,6 +1950,10 @@ function buildUI() {
   });
   document.getElementById('zoom').addEventListener('input', e => {
     document.getElementById('zoom-val').textContent = (e.target.value/100).toFixed(2)+'×';
+    schedulePreview();
+  });
+  document.getElementById('flame-hole').addEventListener('input', e => {
+    document.getElementById('flame-hole-val').textContent = e.target.value + '%';
     schedulePreview();
   });
   document.getElementById('gamma').addEventListener('input', e => {
