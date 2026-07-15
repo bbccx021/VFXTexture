@@ -12,9 +12,9 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 **煙霧 Smoke** — CelSmoke 卡通煙團（平滑聯集法線兩色調、頂亮底暗如真實雲團、2× 超取樣抗鋸齒）
 
-**石頭 Rock** — Rock 程序化石頭（不規則多邊形硬邊輪廓、低多邊形平面刻面、頂部亮面）
+**石頭 Rock** — Rock 程序化石頭（有稜有角巨石輪廓、三調卡通面、底部坐地）
 
-**火焰 Fire** — Flame 程序化火焰（寬圓潤多瓣身體 + 雙尖火舌，與卡通煙團同一套球面法線立體著色，黑色缺口數量／大小可用滑桿調整）
+**火焰 Fire** — Flame 程序化火焰（寬圓潤多瓣身體 + 雙尖火舌、自帶尖端的內焰亮部；缺口數量／大小滑桿 + 🎲 一鍵換位）
 
 **爆發 Burst** — Shockwave 衝擊波環、MuzzleFlash 槍口火光、Sparks 星形火花、GroundCrack 地裂裂紋
 
@@ -24,10 +24,10 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 ## 功能 / Features
 
-- 10 種色彩映射：灰階 / **卡通雙色** / **卡通三色** / 金 / Plasma / 火焰 / 冰 / 電 / 毒 / 熔岩 gradient + cel mapping
+- 11 種色彩映射：灰階 / **卡通雙色** / **卡通三色** / **自訂雙色（color picker 暗色＋亮色）** / 金 / Plasma / 火焰 / 冰 / 電 / 毒 / 熔岩 gradient + cel mapping
 - 背景切換：黑 / 白 / 透明（透明輸出帶 alpha 通道，可直接放進引擎）background: black / white / alpha
 - 後處理鏈：色階、對比、Gamma、亮度、反轉、**Glow 發光（bloom，強度 + 半徑，預覽引擎發亮效果）** + 亮度直方圖 + 一鍵自動色階
-- 卡通風格選擇：**賽璐璐 / 手繪 / 向量 / 風格化** 一鍵預設（色塊階數、墨線描邊、外框線、邊緣抖動四參數可再微調）；cel 開啟時自動 2× 超取樣消除邊緣鋸齒 toon styles + SSAA
+- 卡通風格：**賽璐璐** 一鍵預設（色塊階數、墨線描邊、外框線、邊緣抖動四參數可再微調）；cel 開啟時自動 2× 超取樣消除邊緣鋸齒 cel style + SSAA
 - 溶解預覽
 - 批次 ZIP 下載、URL 參數分享
 - 中文 / English 語言切換

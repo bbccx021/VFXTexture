@@ -163,11 +163,25 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
           <span class="sl-val" id="zoom-val">1.00×</span>
         </div>
         <div class="sl-row">
-          <span class="sl-lbl" data-i18n="lbl_fhole">火焰缺口</span>
-          <input type="range" id="flame-hole" min="0" max="100" value="50">
-          <span class="sl-val" id="flame-hole-val">50%</span>
+          <span class="sl-lbl" data-i18n="lbl_fholeN">缺口數量</span>
+          <input type="range" id="flame-hole-n" min="0" max="6" value="2">
+          <span class="sl-val" id="flame-hole-n-val">2</span>
+        </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_fholeS">缺口大小</span>
+          <input type="range" id="flame-hole-size" min="20" max="250" value="100">
+          <span class="sl-val" id="flame-hole-size-val">1.00×</span>
+        </div>
+        <div class="chk-row" style="padding-bottom:4px">
+          <button class="btn btn-rand" data-i18n="btn_fhole" onclick="rerollHoles()">🎲 缺口換位</button>
         </div>
         <div class="radio-row" id="cmap-row" style="padding:4px 0 6px"></div>
+        <div class="chk-row" id="custom-color-row" style="gap:8px;padding:0 0 6px;align-items:center">
+          <span class="sl-lbl" data-i18n="lbl_cols" style="min-width:44px">自訂色</span>
+          <input type="color" id="col-dark" value="#7a3010" title="暗色 / Shadow" style="width:40px;height:24px;border:1px solid var(--border);border-radius:4px;background:var(--entry);padding:1px">
+          <input type="color" id="col-light" value="#ffd870" title="亮色 / Light" style="width:40px;height:24px;border:1px solid var(--border);border-radius:4px;background:var(--entry);padding:1px">
+          <span class="res-info" data-i18n="lbl_cols_hint">暗 / 亮</span>
+        </div>
         <div class="radio-row" id="bg-row" style="padding:0 0 6px;align-items:center">
           <span class="sl-lbl" data-i18n="sec_bg" style="min-width:44px">背景</span>
           <label><input type="radio" name="bg" value="black" checked> <span data-i18n="bg_black">黑</span></label>
@@ -229,9 +243,6 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
         <div class="radio-row" id="style-row" style="padding:2px 0 4px">
           <label><input type="radio" name="fxstyle" value="none" checked> <span data-i18n="style_none">無</span></label>
           <label><input type="radio" name="fxstyle" value="cel"> <span data-i18n="style_cel">賽璐璐</span></label>
-          <label><input type="radio" name="fxstyle" value="hand"> <span data-i18n="style_hand">手繪</span></label>
-          <label><input type="radio" name="fxstyle" value="vector"> <span data-i18n="style_vector">向量</span></label>
-          <label><input type="radio" name="fxstyle" value="stylized"> <span data-i18n="style_sty">風格化</span></label>
         </div>
         <div class="sl-row">
           <span class="sl-lbl" data-i18n="lbl_bands">色塊階數</span>
@@ -318,19 +329,20 @@ const I18N = {
   sec_type:['特效類型','Effect Type'], sec_res:['解析度','Resolution'], sec_seed:['隨機種子','Random Seed'],
   sec_param:['參數調整','Parameters'], sec_post:['後處理','Post-Process'], sec_batch:['批次下載','Batch Export'],
   sec_cel:['卡通風格','Toon Style'],
-  style_none:['無','None'], style_cel:['賽璐璐','Cel'], style_hand:['手繪','Hand-drawn'],
-  style_vector:['向量','Vector'], style_sty:['風格化','Stylized'],
+  style_none:['無','None'], style_cel:['賽璐璐','Cel'],
   lbl_bands:['色塊階數','Bands'], lbl_outline:['描邊','Outline'], lbl_silh:['外框線','Silhouette'], lbl_rough:['邊緣抖動','Rough'],
   adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
   lbl_detail:['細節層','Octaves'], lbl_zoom:['縮放','Scale'], lbl_contrast:['對比','Contrast'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
-  lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'], lbl_fhole:['火焰缺口','Flame holes'],
+  lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'],
+  lbl_fholeN:['缺口數量','Holes'], lbl_fholeS:['缺口大小','Hole size'], btn_fhole:['🎲 缺口換位','🎲 Reroll holes'],
   chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
   btn_rand:['🎲 隨機','🎲 Random'], btn_auto:['⚡ 自動色階','⚡ Auto Levels'], btn_reset:['重設','Reset'],
   btn_save:['↓ 下載 PNG','↓ Save PNG'], btn_batch:['⊞ 批次 ZIP','⊞ Batch ZIP'], btn_share:['🔗 分享連結','🔗 Share Link'],
   cm_gray:['灰階','Gray'], cm_gold:['金色','Gold'], cm_plasma:['Plasma','Plasma'],
   cm_fire:['火焰','Fire'], cm_ice:['冰','Ice'], cm_electric:['電','Electric'], cm_toxic:['毒','Toxic'], cm_magma:['熔岩','Magma'],
-  cm_cel2:['卡通雙色','Cel 2'], cm_cel3:['卡通三色','Cel 3'],
+  cm_cel2:['卡通雙色','Cel 2'], cm_cel3:['卡通三色','Cel 3'], cm_custom:['自訂','Custom'],
+  lbl_cols:['自訂色','Colors'], lbl_cols_hint:['暗 / 亮','dark / light'],
   sec_bg:['背景','Background'], bg_black:['黑','Black'], bg_white:['白','White'], bg_trans:['透明','Alpha'],
   pv_dissolve:['溶解','Dissolve'],
   tab_live:['即時','Live'], tab_dissolve:['溶解','Dissolve'],
@@ -799,69 +811,45 @@ function generateCelSmoke(size, octaves, seed, freqScale) {
   return renderCloud(size, blobs, seed, la, 0.032);
 }
 
-// 程序化石頭：不規則多邊形硬邊輪廓 + 平面刻面（低多邊形風），無抖動、無圓角
+// 程序化石頭：有稜有角的巨石輪廓 + 三調卡通面（頂亮 / 中 / 底暗），底部略平坐地
 // 搭配 cel3 調色最佳
 function generateRock(size, octaves, seed, freqScale) {
   const rng = new RNG((seed * 374761393 + 5) >>> 0 || 1); rng.next();
   const k = Math.max(0.02, Math.min(1.5, freqScale));
-  const cx = 0.5, cy = 0.52;
-  const nV = 6 + (octaves % 5);                              // octaves 控制頂點數 6..10
-  const vs = [];
-  const a0 = rng.rand() * Math.PI * 2;
-  for (let i = 0; i < nV; i++) {
-    let a = a0 + (i + (rng.rand() - 0.5) * 0.55) * Math.PI * 2 / nV;
-    a = Math.atan2(Math.sin(a), Math.cos(a));
-    const r = 0.30 * k * (0.72 + rng.rand() * 0.52);
-    vs.push({ x: cx + Math.cos(a) * r * 1.15, y: cy + Math.sin(a) * r * 0.92, a });
-  }
-  vs.sort((p, q) => p.a - q.a);                              // 角度排序 → 星形多邊形
-  const la = -2.30 + (rng.rand() - 0.5) * 0.3;               // 光源左上
-  const Lx = Math.cos(la), Ly = Math.sin(la);
-  // 每個扇形刻面一個平調：面法線 = 邊中點方向（朝光 → 亮），硬切三調
-  const tones = vs.map((v, i) => {
-    const w = vs[(i + 1) % nV];
-    const mx = (v.x + w.x) / 2 - cx, my = (v.y + w.y) / 2 - cy;
-    const ml = Math.hypot(mx, my) || 1;
-    const d = (mx / ml) * Lx + (my / ml) * Ly;
-    return d > 0.30 ? 0.92 : d > -0.35 ? 0.58 : 0.30;
-  });
-  // 星形多邊形命中測試：回傳是否在內 + 所屬扇區
-  function polyHit(px, py) {
-    const dx = px - cx, dy = py - cy;
-    const pa = Math.atan2(dy, dx), pr = Math.hypot(dx, dy);
-    let si = nV - 1;
-    for (let s = 0; s < nV; s++) {
-      const a1 = vs[s].a, a2 = vs[(s + 1) % nV].a;
-      if (a2 > a1 ? (pa >= a1 && pa < a2) : (pa >= a1 || pa < a2)) { si = s; break; }
-    }
-    const v = vs[si], w = vs[(si + 1) % nV];
-    const ex = w.x - v.x, ey = w.y - v.y;
-    const ux = Math.cos(pa), uy = Math.sin(pa);
-    const det = ux * (-ey) - uy * (-ex);
-    if (Math.abs(det) < 1e-9) return { inside: false, si };
-    const rEdge = ((v.x - cx) * (-ey) - (v.y - cy) * (-ex)) / det;
-    return { inside: rEdge > 0 && pr < rEdge, si };
-  }
-  // 頂部亮面 = 縮 55%、往光源偏移的內多邊形
-  const hx = cx + Lx * 0.05 * k, hy = cy + Ly * 0.05 * k;
+  const cx = 0.5, cy = 0.50, R0 = 0.30 * k, aspect = 1.20;   // 偏寬
+  const nH = 3 + (octaves % 4);
+  const H = [];
+  for (let h = 0; h < nH; h++) H.push({ f: 2 + h, a: (0.06 + rng.rand() * 0.11) / (h * 0.6 + 1), p: rng.rand() * Math.PI * 2 });
+  const la = -2.30 + (rng.rand() - 0.5) * 0.25, Lz = 0.55;   // 光源左上
+  const Ln = Math.hypot(Math.cos(la), Math.sin(la), Lz) || 1;
+  const l3x = Math.cos(la) / Ln, l3y = Math.sin(la) / Ln, l3z = Lz / Ln;
+  const t1 = 0.10, t2 = 0.52;                                // 三調終端線
+  const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x77) >>> 0, 1);
+  const groundY = cy + R0 * 0.66;                            // 底部裁平
+  const eAA = 0.02 * k;
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
-    const py = j / size;
+    const yy = j / size;
     for (let i = 0; i < size; i++) {
-      const px = i / size;
       const idx = j * size + i;
-      const h = polyHit(px, py);
-      if (!h.inside) { out[idx] = 0; continue; }
-      // 點是否落在內多邊形：逆變換回原多邊形空間再測一次
-      const inr = polyHit(hx + (px - hx) / 0.55, hy + (py - hy) / 0.55);
-      out[idx] = inr.inside && tones[h.si] >= 0.58 ? 0.95 : tones[h.si];
+      const dx = i / size - cx, dy = (yy - cy) / aspect;
+      const a = Math.atan2(dy, dx), r = Math.hypot(dx, dy);
+      let Rm = R0;
+      for (const h of H) Rm += R0 * h.a * Math.cos(h.f * a + h.p);
+      Rm *= 0.92 + (wob[idx] - 0.5) * 0.12;                  // 手繪抖動
+      if (r >= Rm || yy > groundY) { out[idx] = 0; continue; }
+      const nrm = r / Rm, hh = Math.sqrt(Math.max(0, 1 - nrm * nrm));
+      const ndotl = (dx / Rm) * l3x + (dy / Rm) * l3y + hh * l3z;
+      const tone = ndotl > t2 ? 0.92 : ndotl > t1 ? 0.58 : 0.26;
+      const cov = Math.min(1, (Rm - r) / eAA, (groundY - yy) / 0.02);
+      out[idx] = tone * Math.max(0, cov);
     }
   }
   return out;
 }
 
-// 程序化火焰：卡通煙團式圓滾滾團塊 + 往上竄的火舌鏈（不規則元素），光源從下方 → 底亮頂暗
-// 搭配 fire / cel2 調色最佳
+// 程序化火焰：寬圓潤多瓣身體 + 雙尖火舌 + 自帶尖端的內焰亮部（經典卡通兩層火）
+// 缺口數量 / 大小 / 位置由使用者獨立控制。搭配 fire / magma 調色最佳
 function generateFlame(size, octaves, seed, freqScale, p) {
   const rng = new RNG((seed * 2654435761 + 23) >>> 0 || 1); rng.next();
   const k = Math.max(0.02, Math.min(1.6, freqScale));
@@ -894,21 +882,50 @@ function generateFlame(size, octaves, seed, freqScale, p) {
     blobs.push({ x: sx, y: sy, r: sr });
     sx -= dir * sr * 0.35; sy -= sr * 0.80; sr *= 0.68;
   }
-  // 負空間缺口：數量與大小由使用者「火焰缺口」滑桿控制（0 = 無）
-  // 注意：缺口的隨機數放在最後抽 → 拖滑桿時火焰本體形狀不變
-  const amt = p && typeof p.holeAmt === 'number' ? p.holeAmt : 0.5;
+  // 負空間缺口：獨立 RNG 流（seed + holeSeed）→ 數量 / 大小 / 位置皆可獨立調整，
+  // 換位或改數量時火焰本體形狀完全不變
+  const hN    = p && p.holeN    !== undefined ? p.holeN    : 2;
+  const hSize = p && p.holeSize !== undefined ? p.holeSize : 1;
+  const hSeed = p && p.holeSeed !== undefined ? p.holeSeed : 0;
+  const hrng = new RNG((((seed + hSeed * 7919) * 40503 + 3) >>> 0) || 1); hrng.next();
   const holes = [];
-  const nHo = Math.round(amt * 3);                           // 0..3 個
-  for (let hI = 0; hI < nHo; hI++) {
+  for (let hI = 0; hI < hN; hI++) {
     holes.push({
-      x: cx + (hI === 0 ? dir : (rng.rand() < 0.5 ? -1 : 1)) * (0.05 + rng.rand() * 0.07) * k,
-      y: 0.57 + (rng.rand() - 0.5) * 0.14,
-      r: (0.016 + rng.rand() * 0.018) * (0.5 + amt * 1.3) * k,   // 越大格越大洞
+      x: cx + (hrng.rand() - 0.5) * 0.20 * k,
+      y: 0.50 + hrng.rand() * 0.24,
+      r: (0.017 + hrng.rand() * 0.015) * hSize * k,
     });
   }
-  // 與卡通煙團同一套著色（同光源方位、同兩色調、同手繪抖動）→ 立體感與風格一致
-  const la = -1.95 + (rng.rand() - 0.5) * 0.3;
-  return renderCloud(size, blobs, seed, la, 0.032, holes);
+  // 內焰：外焰縮小 62%、錨定底部中心 → 自帶火舌尖的亮部（經典卡通兩層火，非煙團打光）
+  const ax = cx, ay = 0.76;
+  const core = blobs.map(b => ({ x: ax + (b.x - ax) * 0.62, y: ay + (b.y - ay) * 0.62, r: b.r * 0.55 }));
+  const wobX = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9e37) >>> 0, 1);
+  const wobY = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51ab) >>> 0, 1);
+  function hitN(list, qx, qy) {
+    let h = 0;
+    for (const b of list) {
+      const dx = qx - b.x, dy = qy - b.y, d2 = dx * dx + dy * dy;
+      if (d2 < b.r * b.r) { const hv = Math.sqrt(1 - d2 / (b.r * b.r)); if (hv > h) h = hv; }
+    }
+    return h;
+  }
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const qx = i / size + (wobX[idx] - 0.5) * 0.032;
+      const qy = j / size + (wobY[idx] - 0.5) * 0.032;
+      const hOut = hitN(blobs, qx, qy);
+      if (hOut <= 0) { out[idx] = 0; continue; }
+      let inHole = false;
+      for (const ho of holes) { const dx = qx - ho.x, dy = qy - ho.y; if (dx * dx + dy * dy < ho.r * ho.r) { inHole = true; break; } }
+      if (inHole) { out[idx] = 0; continue; }
+      // 內焰形狀決定亮部（自帶尖端）/ 其餘為暗焰
+      const tone = hitN(core, qx, qy) > 0.12 ? 0.95 : 0.58;
+      out[idx] = tone * Math.min(1, hOut / 0.10);            // 邊緣 AA
+    }
+  }
+  return out;
 }
 
 // 衝擊波：亮環（前緣銳利）+ 內側拖尾，環半徑帶角度諧波不規則
@@ -1230,6 +1247,12 @@ let lastArr = null;
 let lastOut = null;
 let debounceId = null;
 let isGenerating = false;
+let holeSeed = 0;                     // 火焰缺口的獨立隨機流（🎲 換位遞增）
+
+function rerollHoles() {
+  holeSeed++;
+  schedulePreview();
+}
 const PREVIEW_CALC = 256;
 const PREVIEW_SS = 2;                 // 預覽超取樣倍率（消除 cel 邊緣鋸齒）
 
@@ -1255,7 +1278,9 @@ function getParams() {
     celRough:  parseInt(document.getElementById('cel-rough').value) / 100,
     glowStr:   parseInt(document.getElementById('glow-str').value) / 100,
     glowRad:   parseInt(document.getElementById('glow-rad').value),
-    holeAmt:   parseInt(document.getElementById('flame-hole').value) / 100,
+    holeN:     parseInt(document.getElementById('flame-hole-n').value),
+    holeSize:  parseInt(document.getElementById('flame-hole-size').value) / 100,
+    holeSeed:  holeSeed,
   };
 }
 
@@ -1454,16 +1479,13 @@ function setCel(levels, outline, silh, rough) {
 
 // 卡通風格預設：[色塊階數, 描邊%, 外框線px, 邊緣抖動%]
 const STYLE_PRESETS = {
-  none:     [1, 0, 0, 0],
-  cel:      [4, 45, 2, 0],     // 賽璐璐：平色塊 + 墨線 + 外框
-  hand:     [5, 65, 1, 45],    // 手繪：重描邊 + 邊緣抖動（線條手抖感）
-  vector:   [3, 0, 2, 0],      // 向量：乾淨平色塊 + 細外框，無內描邊
-  stylized: [6, 30, 3, 20],    // 風格化：多階 + 粗框 + 微抖動
+  none: [1, 0, 0, 0],
+  cel:  [4, 45, 2, 0],         // 賽璐璐：平色塊 + 墨線 + 外框
 };
 function applyStyle(name) {
   const v = STYLE_PRESETS[name] || STYLE_PRESETS.none;
   setCel(v[0], v[1], v[2], v[3]);
-  setStatus(name === 'none' ? t('st_ready') : '🎨 ' + t('style_' + (name === 'stylized' ? 'sty' : name)), name === 'none' ? 'var(--dim)' : 'var(--green)');
+  setStatus(name === 'none' ? t('st_ready') : '🎨 ' + t('style_cel'), name === 'none' ? 'var(--dim)' : 'var(--green)');
   if (lastArr) renderTilePreview();
 }
 
@@ -1513,8 +1535,19 @@ function rampLookup(ramp, g) {
 const CEL2 = { shadow:[110,124,156], light:[242,240,230] };                 // 卡通雙色：藍灰 / 米白
 const CEL3 = { dark:[76,84,110], mid:[150,156,170], light:[238,236,228] };  // 卡通三色：暗 / 中 / 亮
 
-function colorAt(colormap, v) {
+function hexRGB(h) {
+  return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+}
+function getCustomColors() {
+  return {
+    dark:  hexRGB(document.getElementById('col-dark').value || '#7a3010'),
+    light: hexRGB(document.getElementById('col-light').value || '#ffd870'),
+  };
+}
+
+function colorAt(colormap, v, custom) {
   v = v < 0 ? 0 : v > 1 ? 1 : v;
+  if (colormap === 'custom') return v < 0.60 ? custom.dark : custom.light;
   if (colormap === 'cel2') return v < 0.60 ? CEL2.shadow : CEL2.light;
   if (colormap === 'cel3') return v < 0.40 ? CEL3.dark : v < 0.72 ? CEL3.mid : CEL3.light;
   if (VFX_RAMPS[colormap]) return rampLookup(VFX_RAMPS[colormap], v);
@@ -1535,10 +1568,11 @@ function getBgMode() {
 function applyColormap(arr, colormap) {
   const N = arr.length, out = new Uint8ClampedArray(N*4);
   const bg = getBgMode();
-  const isCel = colormap === 'cel2' || colormap === 'cel3';
+  const isCel = colormap === 'cel2' || colormap === 'cel3' || colormap === 'custom';
+  const custom = colormap === 'custom' ? getCustomColors() : null;
   for (let i = 0; i < N; i++) {
     const v = arr[i];
-    const c = colorAt(colormap, v);
+    const c = colorAt(colormap, v, custom);
     const cov = isCel ? sstep(0.03, 0.18, v) : (v < 0 ? 0 : v > 1 ? 1 : v);
     const o = i * 4;
     if (bg === 'white') {
@@ -1805,7 +1839,10 @@ function shareURL() {
     cr: document.getElementById('cel-rough').value,
     gs: document.getElementById('glow-str').value,
     gr: document.getElementById('glow-rad').value,
-    fh: document.getElementById('flame-hole').value,
+    fn: document.getElementById('flame-hole-n').value,
+    fs: document.getElementById('flame-hole-size').value,
+    c1: document.getElementById('col-dark').value.slice(1),
+    c2: document.getElementById('col-light').value.slice(1),
   });
   const url = location.origin + location.pathname + '?' + q.toString();
   const done = () => setStatus('🔗 copied', 'var(--green)');
@@ -1882,10 +1919,16 @@ function applyParamsFromURL() {
     document.getElementById('glow-rad').value = parseInt(q.get('gr')) || 8;
     document.getElementById('glow-rad-val').textContent = parseInt(q.get('gr')) || 8;
   }
-  if (q.get('fh') !== null) {
-    document.getElementById('flame-hole').value = parseInt(q.get('fh')) || 0;
-    document.getElementById('flame-hole-val').textContent = (parseInt(q.get('fh')) || 0) + '%';
+  if (q.get('fn') !== null && q.get('fn') !== undefined && q.get('fn') !== '') {
+    document.getElementById('flame-hole-n').value = parseInt(q.get('fn')) || 0;
+    document.getElementById('flame-hole-n-val').textContent = parseInt(q.get('fn')) || 0;
   }
+  if (q.get('fs')) {
+    document.getElementById('flame-hole-size').value = parseInt(q.get('fs')) || 100;
+    document.getElementById('flame-hole-size-val').textContent = ((parseInt(q.get('fs')) || 100)/100).toFixed(2) + '×';
+  }
+  if (q.get('c1') && /^[0-9a-fA-F]{6}$/.test(q.get('c1'))) document.getElementById('col-dark').value = '#' + q.get('c1');
+  if (q.get('c2') && /^[0-9a-fA-F]{6}$/.test(q.get('c2'))) document.getElementById('col-light').value = '#' + q.get('c2');
 }
 
 // ============================================================
@@ -1914,8 +1957,8 @@ function buildCmapRadios() {
   const cr = document.getElementById('cmap-row');
   const cur = document.querySelector('input[name=cmap]:checked')?.value || 'gray';
   cr.innerHTML = '';
-  [['gray','cm_gray'],['cel2','cm_cel2'],['cel3','cm_cel3'],['gold','cm_gold'],['plasma','cm_plasma'],['fire','cm_fire'],
-   ['ice','cm_ice'],['electric','cm_electric'],['toxic','cm_toxic'],['magma','cm_magma']].forEach(([v, k]) => {
+  [['gray','cm_gray'],['cel2','cm_cel2'],['cel3','cm_cel3'],['custom','cm_custom'],['gold','cm_gold'],['plasma','cm_plasma'],
+   ['fire','cm_fire'],['ice','cm_ice'],['electric','cm_electric'],['toxic','cm_toxic'],['magma','cm_magma']].forEach(([v, k]) => {
     const lbl = document.createElement('label');
     const r = document.createElement('input');
     r.type='radio'; r.name='cmap'; r.value=v;
@@ -1952,8 +1995,12 @@ function buildUI() {
     document.getElementById('zoom-val').textContent = (e.target.value/100).toFixed(2)+'×';
     schedulePreview();
   });
-  document.getElementById('flame-hole').addEventListener('input', e => {
-    document.getElementById('flame-hole-val').textContent = e.target.value + '%';
+  document.getElementById('flame-hole-n').addEventListener('input', e => {
+    document.getElementById('flame-hole-n-val').textContent = e.target.value;
+    schedulePreview();
+  });
+  document.getElementById('flame-hole-size').addEventListener('input', e => {
+    document.getElementById('flame-hole-size-val').textContent = (e.target.value/100).toFixed(2) + '×';
     schedulePreview();
   });
   document.getElementById('gamma').addEventListener('input', e => {
@@ -2021,6 +2068,13 @@ function buildUI() {
   document.querySelectorAll('input[name=bg]').forEach(r =>
     r.addEventListener('change', () => {
       document.getElementById('preview').classList.toggle('checker', getBgMode() === 'transparent');
+      if (lastArr) renderTilePreview();
+    }));
+  ['col-dark','col-light'].forEach(id =>
+    document.getElementById(id).addEventListener('input', () => {
+      // 換色時自動切到自訂調色
+      const r = document.querySelector('input[name=cmap][value=custom]');
+      if (r && !r.checked) r.checked = true;
       if (lastArr) renderTilePreview();
     }));
   document.getElementById('seed').addEventListener('input', schedulePreview);
