@@ -159,7 +159,7 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
         </div>
         <div class="sl-row">
           <span class="sl-lbl" data-i18n="lbl_zoom">縮放</span>
-          <input type="range" id="zoom" min="1" max="16" value="4">
+          <input type="range" id="zoom" min="1" max="400" value="100">
           <span class="sl-val" id="zoom-val">1.00×</span>
         </div>
         <div class="radio-row" id="cmap-row" style="padding:4px 0 6px"></div>
@@ -210,10 +210,13 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
       </details>
 
       <details class="section" open>
-        <summary class="sec-hdr" data-i18n="sec_cel">手繪 / 賽璐璐</summary>
-        <div class="chk-row" style="gap:8px;padding-bottom:4px">
-          <button class="btn btn-rand" data-i18n="btn_cel_on" onclick="celPreset()">🎨 一鍵賽璐璐</button>
-          <button class="btn btn-rand" data-i18n="btn_cel_off" style="margin-left:auto" onclick="celOff()">關閉</button>
+        <summary class="sec-hdr" data-i18n="sec_cel">卡通風格</summary>
+        <div class="radio-row" id="style-row" style="padding:2px 0 4px">
+          <label><input type="radio" name="fxstyle" value="none" checked> <span data-i18n="style_none">無</span></label>
+          <label><input type="radio" name="fxstyle" value="cel"> <span data-i18n="style_cel">賽璐璐</span></label>
+          <label><input type="radio" name="fxstyle" value="hand"> <span data-i18n="style_hand">手繪</span></label>
+          <label><input type="radio" name="fxstyle" value="vector"> <span data-i18n="style_vector">向量</span></label>
+          <label><input type="radio" name="fxstyle" value="stylized"> <span data-i18n="style_sty">風格化</span></label>
         </div>
         <div class="sl-row">
           <span class="sl-lbl" data-i18n="lbl_bands">色塊階數</span>
@@ -225,10 +228,15 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
           <input type="range" id="cel-outline" min="0" max="100" value="0">
           <span class="sl-val" id="cel-outline-val">0%</span>
         </div>
-        <div class="sl-row" style="padding-bottom:4px">
+        <div class="sl-row">
           <span class="sl-lbl" data-i18n="lbl_silh">外框線</span>
           <input type="range" id="cel-silh" min="0" max="4" value="0">
           <span class="sl-val" id="cel-silh-val">—</span>
+        </div>
+        <div class="sl-row" style="padding-bottom:4px">
+          <span class="sl-lbl" data-i18n="lbl_rough">邊緣抖動</span>
+          <input type="range" id="cel-rough" min="0" max="100" value="0">
+          <span class="sl-val" id="cel-rough-val">0%</span>
         </div>
       </details>
 
@@ -294,9 +302,10 @@ let LANG = (function(){ try { return localStorage.getItem('fxsprite_lang') || 'z
 const I18N = {
   sec_type:['特效類型','Effect Type'], sec_res:['解析度','Resolution'], sec_seed:['隨機種子','Random Seed'],
   sec_param:['參數調整','Parameters'], sec_post:['後處理','Post-Process'], sec_batch:['批次下載','Batch Export'],
-  sec_cel:['手繪 / 賽璐璐','Hand-drawn / Cel'],
-  btn_cel_on:['🎨 一鍵賽璐璐','🎨 Cel Preset'], btn_cel_off:['關閉','Off'],
-  lbl_bands:['色塊階數','Bands'], lbl_outline:['描邊','Outline'], lbl_silh:['外框線','Silhouette'],
+  sec_cel:['卡通風格','Toon Style'],
+  style_none:['無','None'], style_cel:['賽璐璐','Cel'], style_hand:['手繪','Hand-drawn'],
+  style_vector:['向量','Vector'], style_sty:['風格化','Stylized'],
+  lbl_bands:['色塊階數','Bands'], lbl_outline:['描邊','Outline'], lbl_silh:['外框線','Silhouette'], lbl_rough:['邊緣抖動','Rough'],
   adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
   lbl_detail:['細節層','Octaves'], lbl_zoom:['縮放','Scale'], lbl_contrast:['對比','Contrast'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
@@ -751,7 +760,7 @@ function renderCloud(size, blobs, seed, la, wAmp) {
 
 function generateCelSmoke(size, octaves, seed, freqScale) {
   const rng = new RNG((seed * 1013904223 + 7) >>> 0 || 1);
-  const k = Math.max(0.5, Math.min(1.6, freqScale));
+  const k = Math.max(0.02, Math.min(1.6, freqScale));
   const nBlobs = Math.min(9, 3 + Math.round(octaves / 2));   // octaves 控制團塊數
   const blobs = [{ x: 0.5 + (rng.rand() - 0.5) * 0.06, y: 0.56 + (rng.rand() - 0.5) * 0.05, r: 0.21 * k }];
   for (let b = 1; b < nBlobs; b++) {
@@ -766,82 +775,123 @@ function generateCelSmoke(size, octaves, seed, freqScale) {
   return renderCloud(size, blobs, seed, la, 0.032);
 }
 
-// 程序化石頭：有稜有角的巨石輪廓 + 三調卡通面（頂亮 / 中 / 底暗），底部略平坐地
+// 程序化石頭：不規則多邊形硬邊輪廓 + 平面刻面（低多邊形風），無抖動、無圓角
 // 搭配 cel3 調色最佳
 function generateRock(size, octaves, seed, freqScale) {
   const rng = new RNG((seed * 374761393 + 5) >>> 0 || 1); rng.next();
-  const k = Math.max(0.55, Math.min(1.5, freqScale));
-  const cx = 0.5, cy = 0.50, R0 = 0.30 * k, aspect = 1.20;   // 偏寬
-  const nH = 3 + (octaves % 4);
-  const H = [];
-  for (let h = 0; h < nH; h++) H.push({ f: 2 + h, a: (0.06 + rng.rand() * 0.11) / (h * 0.6 + 1), p: rng.rand() * Math.PI * 2 });
-  const la = -2.30 + (rng.rand() - 0.5) * 0.25, Lz = 0.55;   // 光源左上
-  const Ln = Math.hypot(Math.cos(la), Math.sin(la), Lz) || 1;
-  const l3x = Math.cos(la) / Ln, l3y = Math.sin(la) / Ln, l3z = Lz / Ln;
-  const t1 = 0.10, t2 = 0.52;                                // 三調終端線
-  const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x77) >>> 0, 1);
-  const groundY = cy + R0 * 0.66;                            // 底部裁平
-  const eAA = 0.02 * k;
+  const k = Math.max(0.02, Math.min(1.5, freqScale));
+  const cx = 0.5, cy = 0.52;
+  const nV = 6 + (octaves % 5);                              // octaves 控制頂點數 6..10
+  const vs = [];
+  const a0 = rng.rand() * Math.PI * 2;
+  for (let i = 0; i < nV; i++) {
+    let a = a0 + (i + (rng.rand() - 0.5) * 0.55) * Math.PI * 2 / nV;
+    a = Math.atan2(Math.sin(a), Math.cos(a));
+    const r = 0.30 * k * (0.72 + rng.rand() * 0.52);
+    vs.push({ x: cx + Math.cos(a) * r * 1.15, y: cy + Math.sin(a) * r * 0.92, a });
+  }
+  vs.sort((p, q) => p.a - q.a);                              // 角度排序 → 星形多邊形
+  const la = -2.30 + (rng.rand() - 0.5) * 0.3;               // 光源左上
+  const Lx = Math.cos(la), Ly = Math.sin(la);
+  // 每個扇形刻面一個平調：面法線 = 邊中點方向（朝光 → 亮），硬切三調
+  const tones = vs.map((v, i) => {
+    const w = vs[(i + 1) % nV];
+    const mx = (v.x + w.x) / 2 - cx, my = (v.y + w.y) / 2 - cy;
+    const ml = Math.hypot(mx, my) || 1;
+    const d = (mx / ml) * Lx + (my / ml) * Ly;
+    return d > 0.30 ? 0.92 : d > -0.35 ? 0.58 : 0.30;
+  });
+  // 星形多邊形命中測試：回傳是否在內 + 所屬扇區
+  function polyHit(px, py) {
+    const dx = px - cx, dy = py - cy;
+    const pa = Math.atan2(dy, dx), pr = Math.hypot(dx, dy);
+    let si = nV - 1;
+    for (let s = 0; s < nV; s++) {
+      const a1 = vs[s].a, a2 = vs[(s + 1) % nV].a;
+      if (a2 > a1 ? (pa >= a1 && pa < a2) : (pa >= a1 || pa < a2)) { si = s; break; }
+    }
+    const v = vs[si], w = vs[(si + 1) % nV];
+    const ex = w.x - v.x, ey = w.y - v.y;
+    const ux = Math.cos(pa), uy = Math.sin(pa);
+    const det = ux * (-ey) - uy * (-ex);
+    if (Math.abs(det) < 1e-9) return { inside: false, si };
+    const rEdge = ((v.x - cx) * (-ey) - (v.y - cy) * (-ex)) / det;
+    return { inside: rEdge > 0 && pr < rEdge, si };
+  }
+  // 頂部亮面 = 縮 55%、往光源偏移的內多邊形
+  const hx = cx + Lx * 0.05 * k, hy = cy + Ly * 0.05 * k;
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
-    const yy = j / size;
+    const py = j / size;
     for (let i = 0; i < size; i++) {
+      const px = i / size;
       const idx = j * size + i;
-      const dx = i / size - cx, dy = (yy - cy) / aspect;
-      const a = Math.atan2(dy, dx), r = Math.hypot(dx, dy);
-      let Rm = R0;
-      for (const h of H) Rm += R0 * h.a * Math.cos(h.f * a + h.p);
-      Rm *= 0.92 + (wob[idx] - 0.5) * 0.12;                  // 手繪抖動
-      if (r >= Rm || yy > groundY) { out[idx] = 0; continue; }
-      const nrm = r / Rm, hh = Math.sqrt(Math.max(0, 1 - nrm * nrm));
-      const ndotl = (dx / Rm) * l3x + (dy / Rm) * l3y + hh * l3z;
-      const tone = ndotl > t2 ? 0.92 : ndotl > t1 ? 0.58 : 0.26;
-      const cov = Math.min(1, (Rm - r) / eAA, (groundY - yy) / 0.02);
-      out[idx] = tone * Math.max(0, cov);
+      const h = polyHit(px, py);
+      if (!h.inside) { out[idx] = 0; continue; }
+      // 點是否落在內多邊形：逆變換回原多邊形空間再測一次
+      const inr = polyHit(hx + (px - hx) / 0.55, hy + (py - hy) / 0.55);
+      out[idx] = inr.inside && tones[h.si] >= 0.58 ? 0.95 : tones[h.si];
     }
   }
   return out;
 }
 
-// 程序化火焰：由下往上堆疊縮小的團塊 → 圓潤火焰輪廓，內深處為亮核、外緣為暗焰，帶負空間洞
-// 搭配 fire / magma / cel2 調色最佳
+// 程序化火焰：卡通煙團式圓滾滾團塊 + 往上竄的火舌鏈（不規則元素），光源從下方 → 底亮頂暗
+// 搭配 fire / cel2 調色最佳
 function generateFlame(size, octaves, seed, freqScale) {
   const rng = new RNG((seed * 2654435761 + 23) >>> 0 || 1); rng.next();
-  const k = Math.max(0.6, Math.min(1.5, freqScale));
-  const cx = 0.5, blobs = [];
-  const n = 4 + Math.round(octaves / 3);
-  for (let b = 0; b < n; b++) {
-    const tt = b / (n - 1);                                  // 0底 → 1頂
-    const x = cx + (rng.rand() - 0.5) * 0.18 * tt;           // 頂端左右擺動
-    const y = 0.80 - tt * 0.60;
-    const r = (0.17 - tt * 0.11) * k * (0.85 + rng.rand() * 0.3);
-    blobs.push({ x, y, r: Math.max(0.03 * k, r) });
+  const k = Math.max(0.02, Math.min(1.6, freqScale));
+  const blobs = [];
+  // 底部圓滾滾主體（同卡通煙團的球團堆疊）
+  blobs.push({ x: 0.5 + (rng.rand() - 0.5) * 0.04, y: 0.66, r: 0.185 * k });
+  blobs.push({ x: 0.5 - 0.10 * k, y: 0.62 + (rng.rand() - 0.5) * 0.03, r: 0.13 * k * (0.9 + rng.rand() * 0.2) });
+  blobs.push({ x: 0.5 + 0.10 * k, y: 0.63 + (rng.rand() - 0.5) * 0.03, r: 0.13 * k * (0.9 + rng.rand() * 0.2) });
+  // 火舌：緊密重疊、沿弧線彎的球鏈 → 融成圓滑火舌尖（不規則元素）
+  const nT = 3 + Math.round(octaves / 4);
+  let px = 0.5 + (rng.rand() - 0.5) * 0.04, py = 0.58, pr = 0.135 * k;
+  const dir = rng.rand() < 0.5 ? -1 : 1;
+  const bend = dir * (0.15 + rng.rand() * 0.25);             // 弧線彎曲量
+  let ang = -Math.PI / 2;                                    // 起始朝上
+  for (let t = 0; t < nT; t++) {
+    ang += bend * (0.5 + rng.rand() * 0.5) * 0.5;
+    px += Math.cos(ang) * pr * 0.85;                         // 步距 < 半徑 → 強重疊融合
+    py += Math.sin(ang) * pr * 0.85;
+    pr *= 0.68 + rng.rand() * 0.08;
+    if (pr < 0.018 * k) break;
+    blobs.push({ x: px, y: py, r: pr });
   }
-  const holes = [];
-  const nHoles = 1 + Math.round(rng.rand() * 2);
-  for (let h = 0; h < nHoles; h++)
-    holes.push({ x: cx + (rng.rand() - 0.5) * 0.18, y: 0.38 + rng.rand() * 0.30, r: (0.028 + rng.rand() * 0.04) * k });
-  function heightAt(px, py) {
-    let h = 0;
-    for (const b of blobs) {
-      const dx = px - b.x, dy = py - b.y, d2 = dx * dx + dy * dy;
-      if (d2 < b.r * b.r) { const hv = Math.sqrt(b.r * b.r - d2) / b.r; if (hv > h) h = hv; }
+  // 側邊小火苗（反方向、短小）
+  if (rng.rand() > 0.35) {
+    let sx = 0.5 - dir * 0.13 * k, sy = 0.56, sr = 0.06 * k;
+    for (let t = 0; t < 2; t++) {
+      blobs.push({ x: sx, y: sy, r: sr });
+      sx -= dir * sr * 0.7; sy -= sr * 0.9; sr *= 0.6;
     }
-    return h;
   }
-  const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x33) >>> 0, 1);
+  // 負空間洞（參考圖的鏤空）
+  const holes = [];
+  if (rng.rand() > 0.3)
+    holes.push({ x: 0.5 + (rng.rand() - 0.5) * 0.12, y: 0.62 + (rng.rand() - 0.5) * 0.08, r: (0.03 + rng.rand() * 0.03) * k });
+  // 著色：聯集深度 → 核心亮 / 邊緣暗（兩色調、無方向性 → 火舌不會有條紋）
+  const wobX = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9e37) >>> 0, 1);
+  const wobY = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51ab) >>> 0, 1);
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
     for (let i = 0; i < size; i++) {
       const idx = j * size + i;
-      const px = i / size + (wob[idx] - 0.5) * 0.03, py = j / size;
-      const h = heightAt(px, py);
-      if (h <= 0) { out[idx] = 0; continue; }
+      const px = i / size + (wobX[idx] - 0.5) * 0.035;
+      const py = j / size + (wobY[idx] - 0.5) * 0.035;
+      let hN = 0;
+      for (const b of blobs) {
+        const dx = px - b.x, dy = py - b.y, d2 = dx * dx + dy * dy;
+        if (d2 < b.r * b.r) { const hv = Math.sqrt(1 - d2 / (b.r * b.r)); if (hv > hN) hN = hv; }
+      }
+      if (hN <= 0) { out[idx] = 0; continue; }
       let inHole = false;
       for (const ho of holes) { const dx = px - ho.x, dy = py - ho.y; if (dx * dx + dy * dy < ho.r * ho.r) { inHole = true; break; } }
       if (inHole) { out[idx] = 0; continue; }
-      const tone = h > 0.55 ? 0.92 : 0.58;                   // 深處亮核 / 外緣暗焰
-      out[idx] = tone * Math.min(1, h / 0.12);               // 邊緣 AA
+      const tone = hN > 0.52 ? 0.95 : 0.58;                  // 核心亮 / 外緣暗焰
+      out[idx] = tone * Math.min(1, hN / 0.10);              // 邊緣 AA
     }
   }
   return out;
@@ -905,7 +955,7 @@ function getParams() {
     size:      parseInt(document.querySelector('input[name=size]:checked')?.value || '512'),
     seed:      parseInt(document.getElementById('seed').value) || 42,
     octaves:   parseInt(document.getElementById('octaves').value),
-    freqScale: parseInt(document.getElementById('zoom').value) / 4,
+    freqScale: parseInt(document.getElementById('zoom').value) / 100,
     colormap:  document.querySelector('input[name=cmap]:checked')?.value || 'gray',
     gamma:     parseInt(document.getElementById('gamma').value) / 10,
     invert:    document.getElementById('invert').checked,
@@ -918,6 +968,7 @@ function getParams() {
     celLevels: parseInt(document.getElementById('cel-levels').value),
     celOutline:parseInt(document.getElementById('cel-outline').value) / 100,
     celSilh:   parseInt(document.getElementById('cel-silh').value),
+    celRough:  parseInt(document.getElementById('cel-rough').value) / 100,
   };
 }
 
@@ -959,10 +1010,31 @@ function postprocess(arr, gamma=1.0, invert=false, brightness=0.0, contrast=1.0,
 }
 
 // ============================================================
-// 手繪 / 賽璐璐 — 空間處理（posterize + 描邊 + 外框線）
+// 手繪 / 賽璐璐 — 空間處理（邊緣抖動 + posterize + 描邊 + 外框線）
 // ============================================================
-function celShade(arr, size, levels, outline, silh) {
+function celShade(arr, size, levels, outline, silh, rough, seed) {
   const N = arr.length;
+  // 0. 邊緣抖動 — fbm 位移取樣扭曲整個場，做出手繪線條的手抖感
+  if (rough > 0) {
+    const wx = fbm(size, 4, 6, 2, 0.5, ((seed || 1) ^ 0x5f35) >>> 0, 1);
+    const wy = fbm(size, 4, 6, 2, 0.5, ((seed || 1) ^ 0x9ab1) >>> 0, 1);
+    const amp = rough * size * 0.018;
+    const dist = new Float32Array(N);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = y * size + x;
+        let sx = x + (wx[i] - 0.5) * 2 * amp;
+        let sy = y + (wy[i] - 0.5) * 2 * amp;
+        sx = sx < 0 ? 0 : sx > size - 1.001 ? size - 1.001 : sx;
+        sy = sy < 0 ? 0 : sy > size - 1.001 ? size - 1.001 : sy;
+        const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0;
+        const r0 = y0 * size + x0;
+        dist[i] = arr[r0] * (1 - fx) * (1 - fy) + arr[r0 + 1] * fx * (1 - fy)
+                + arr[r0 + size] * (1 - fx) * fy + arr[r0 + size + 1] * fx * fy;
+      }
+    }
+    arr = dist;
+  }
   // 1. Posterize — 量化成 N 階平色塊
   let field = arr;
   if (levels >= 2) {
@@ -1014,11 +1086,15 @@ function celShade(arr, size, levels, outline, silh) {
   return out;
 }
 
+function celActive(p) {
+  return p.celLevels > 1 || p.celOutline > 0 || p.celSilh > 0 || p.celRough > 0;
+}
+
 // tone 後處理 + 賽璐璐，供預覽 / 下載 / 批次共用
 function finalizeField(arr, size, p) {
   let out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
-  if (p.celLevels > 1 || p.celOutline > 0 || p.celSilh > 0) {
-    out = celShade(out, size, p.celLevels, p.celOutline, p.celSilh);
+  if (celActive(p)) {
+    out = celShade(out, size, p.celLevels, p.celOutline, p.celSilh, p.celRough, p.seed);
   }
   return out;
 }
@@ -1040,22 +1116,29 @@ function autoLevels() {
   renderTilePreview();
 }
 
-function setCel(levels, outline, silh) {
+function setCel(levels, outline, silh, rough) {
   document.getElementById('cel-levels').value = levels;
   document.getElementById('cel-outline').value = outline;
   document.getElementById('cel-silh').value = silh;
+  document.getElementById('cel-rough').value = rough;
   document.getElementById('cel-levels-val').textContent = levels <= 1 ? '—' : levels;
   document.getElementById('cel-outline-val').textContent = outline + '%';
   document.getElementById('cel-silh-val').textContent = silh <= 0 ? '—' : silh + 'px';
+  document.getElementById('cel-rough-val').textContent = rough + '%';
 }
-function celPreset() {
-  setCel(4, 45, 2);
-  setStatus(LANG === 'en' ? '🎨 Cel preset applied' : '🎨 賽璐璐已套用', 'var(--green)');
-  if (lastArr) renderTilePreview();
-}
-function celOff() {
-  setCel(1, 0, 0);
-  setStatus(t('st_ready'), 'var(--dim)');
+
+// 卡通風格預設：[色塊階數, 描邊%, 外框線px, 邊緣抖動%]
+const STYLE_PRESETS = {
+  none:     [1, 0, 0, 0],
+  cel:      [4, 45, 2, 0],     // 賽璐璐：平色塊 + 墨線 + 外框
+  hand:     [5, 65, 1, 45],    // 手繪：重描邊 + 邊緣抖動（線條手抖感）
+  vector:   [3, 0, 2, 0],      // 向量：乾淨平色塊 + 細外框，無內描邊
+  stylized: [6, 30, 3, 20],    // 風格化：多階 + 粗框 + 微抖動
+};
+function applyStyle(name) {
+  const v = STYLE_PRESETS[name] || STYLE_PRESETS.none;
+  setCel(v[0], v[1], v[2], v[3]);
+  setStatus(name === 'none' ? t('st_ready') : '🎨 ' + t('style_' + (name === 'stylized' ? 'sty' : name)), name === 'none' ? 'var(--dim)' : 'var(--green)');
   if (lastArr) renderTilePreview();
 }
 
@@ -1162,10 +1245,9 @@ function downsampleField(src, big, size) {
 
 // 產生最終場（cel 開啟時走 2× 超取樣），供下載 / 批次共用
 function computeFinal(type, size, octaves, seed, freqScale, p) {
-  const cel = p.celLevels > 1 || p.celOutline > 0 || p.celSilh > 0;
-  const SS = cel ? 2 : 1, big = size * SS;
+  const SS = celActive(p) ? 2 : 1, big = size * SS;
   const arr = GENERATORS[type](big, octaves, seed, freqScale);
-  const fin = finalizeField(arr, big, p);
+  const fin = finalizeField(arr, big, { ...p, seed });
   return SS > 1 ? downsampleField(fin, big, size) : fin;
 }
 
@@ -1391,6 +1473,7 @@ function shareURL() {
     cl: document.getElementById('cel-levels').value,
     co: document.getElementById('cel-outline').value,
     cs: document.getElementById('cel-silh').value,
+    cr: document.getElementById('cel-rough').value,
   });
   const url = location.origin + location.pathname + '?' + q.toString();
   const done = () => setStatus('🔗 copied', 'var(--green)');
@@ -1424,7 +1507,7 @@ function applyParamsFromURL() {
   }
   if (q.get('zoom')) {
     document.getElementById('zoom').value = q.get('zoom');
-    document.getElementById('zoom-val').textContent = (q.get('zoom')/4).toFixed(2)+'×';
+    document.getElementById('zoom-val').textContent = (q.get('zoom')/100).toFixed(2)+'×';
   }
   if (q.get('size')) {
     const r = document.querySelector(`input[name=size][value="${q.get('size')}"]`);
@@ -1456,8 +1539,8 @@ function applyParamsFromURL() {
     document.getElementById('lev-hi-val').textContent = (q.get('lhi')/100).toFixed(2);
   }
   if (q.get('inv') === '1') document.getElementById('invert').checked = true;
-  if (q.get('cl') || q.get('co') || q.get('cs')) {
-    setCel(parseInt(q.get('cl')) || 1, parseInt(q.get('co')) || 0, parseInt(q.get('cs')) || 0);
+  if (q.get('cl') || q.get('co') || q.get('cs') || q.get('cr')) {
+    setCel(parseInt(q.get('cl')) || 1, parseInt(q.get('co')) || 0, parseInt(q.get('cs')) || 0, parseInt(q.get('cr')) || 0);
   }
 }
 
@@ -1522,7 +1605,7 @@ function buildUI() {
     schedulePreview();
   });
   document.getElementById('zoom').addEventListener('input', e => {
-    document.getElementById('zoom-val').textContent = (e.target.value/4).toFixed(2)+'×';
+    document.getElementById('zoom-val').textContent = (e.target.value/100).toFixed(2)+'×';
     schedulePreview();
   });
   document.getElementById('gamma').addEventListener('input', e => {
@@ -1573,6 +1656,12 @@ function buildUI() {
     document.getElementById('cel-silh-val').textContent = v <= 0 ? '—' : v + 'px';
     if (lastArr) renderTilePreview();
   });
+  document.getElementById('cel-rough').addEventListener('input', e => {
+    document.getElementById('cel-rough-val').textContent = e.target.value + '%';
+    if (lastArr) renderTilePreview();
+  });
+  document.querySelectorAll('input[name=fxstyle]').forEach(r =>
+    r.addEventListener('change', () => applyStyle(r.value)));
   document.querySelectorAll('input[name=bg]').forEach(r =>
     r.addEventListener('change', () => {
       document.getElementById('preview').classList.toggle('checker', getBgMode() === 'transparent');
