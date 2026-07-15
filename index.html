@@ -330,13 +330,13 @@ const I18N = {
   pv_dissolve:['溶解','Dissolve'],
   tab_live:['即時','Live'], tab_dissolve:['溶解','Dissolve'],
   g_strike:['打擊 Strike','Strike'], g_glow:['光暈 Glow','Glow'], g_smoke:['煙霧 Smoke','Smoke'], g_rock:['石頭 Rock','Rock'], g_fire:['火焰 Fire','Fire'],
-  g_burst:['爆發 Burst','Burst'], g_liquid:['液體 Liquid','Liquid'], g_magic:['魔法 Magic','Magic'], g_util:['工具 Utility','Utility'],
+  g_burst:['爆發 Burst','Burst'], g_liquid:['液體 Liquid','Liquid'], g_magic:['魔法 Magic','Magic'],
   st_ready:['就緒','Ready'], live_live:['⬤ 即時預覽','⬤ Live'],
   hotkeys:['Space 重新生成  ·  S 下載  ·  R 隨機種子','Space regen  ·  S save  ·  R reseed'],
 };
 function t(k){ const e = I18N[k]; return e ? e[LANG === 'en' ? 1 : 0] : k; }
 function typeLabelDisp(raw){ return LANG === 'en' ? raw.replace(/\s*[一-鿿].*$/, '') : raw; }
-const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow','煙霧 Smoke':'g_smoke','石頭 Rock':'g_rock','火焰 Fire':'g_fire','爆發 Burst':'g_burst','液體 Liquid':'g_liquid','魔法 Magic':'g_magic','工具 Utility':'g_util'};
+const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow','煙霧 Smoke':'g_smoke','石頭 Rock':'g_rock','火焰 Fire':'g_fire','爆發 Burst':'g_burst','液體 Liquid':'g_liquid','魔法 Magic':'g_magic'};
 const PVTAB_I18N = {live:'tab_live',dissolve:'tab_dissolve'};
 
 function applyI18n() {
@@ -853,56 +853,65 @@ function generateRock(size, octaves, seed, freqScale) {
 function generateFlame(size, octaves, seed, freqScale) {
   const rng = new RNG((seed * 2654435761 + 23) >>> 0 || 1); rng.next();
   const k = Math.max(0.02, Math.min(1.6, freqScale));
-  const blobs = [];
-  // 底部圓滾滾主體（同卡通煙團的球團堆疊）
-  blobs.push({ x: 0.5 + (rng.rand() - 0.5) * 0.04, y: 0.66, r: 0.185 * k });
-  blobs.push({ x: 0.5 - 0.10 * k, y: 0.62 + (rng.rand() - 0.5) * 0.03, r: 0.13 * k * (0.9 + rng.rand() * 0.2) });
-  blobs.push({ x: 0.5 + 0.10 * k, y: 0.63 + (rng.rand() - 0.5) * 0.03, r: 0.13 * k * (0.9 + rng.rand() * 0.2) });
-  // 火舌：緊密重疊、沿弧線彎的球鏈 → 融成圓滑火舌尖（不規則元素）
-  const nT = 3 + Math.round(octaves / 4);
-  let px = 0.5 + (rng.rand() - 0.5) * 0.04, py = 0.58, pr = 0.135 * k;
+  const cx = 0.5 + (rng.rand() - 0.5) * 0.02;
   const dir = rng.rand() < 0.5 ? -1 : 1;
-  const bend = dir * (0.15 + rng.rand() * 0.25);             // 弧線彎曲量
-  let ang = -Math.PI / 2;                                    // 起始朝上
+  const blobs = [];
+  // 寬圓潤底座（微壓扁）+ 多瓣中段 → 火焰身體由下往上自然收窄
+  blobs.push({ x: cx, y: 0.70, r: 0.155 * k });
+  blobs.push({ x: cx - 0.115 * k, y: 0.72, r: 0.105 * k * (0.9 + rng.rand() * 0.2) });
+  blobs.push({ x: cx + 0.115 * k, y: 0.72, r: 0.105 * k * (0.9 + rng.rand() * 0.2) });
+  blobs.push({ x: cx - 0.065 * k + (rng.rand() - 0.5) * 0.02, y: 0.585, r: 0.115 * k });
+  blobs.push({ x: cx + 0.065 * k + (rng.rand() - 0.5) * 0.02, y: 0.595, r: 0.105 * k });
+  // 主火舌：從身體寬度平滑收尖（起始大、縮得慢、強重疊 → 不會「球+角」突兀）
+  const nT = 4 + Math.round(octaves / 4);
+  let px = cx + dir * 0.02, py = 0.52, pr = 0.105 * k;
+  const bend = dir * (0.12 + rng.rand() * 0.20);
+  let ang = -Math.PI / 2;
   for (let t = 0; t < nT; t++) {
-    ang += bend * (0.5 + rng.rand() * 0.5) * 0.5;
-    px += Math.cos(ang) * pr * 0.85;                         // 步距 < 半徑 → 強重疊融合
-    py += Math.sin(ang) * pr * 0.85;
-    pr *= 0.68 + rng.rand() * 0.08;
-    if (pr < 0.018 * k) break;
     blobs.push({ x: px, y: py, r: pr });
+    ang += bend * (0.5 + rng.rand() * 0.5) * 0.6;
+    px += Math.cos(ang) * pr * 0.72;                         // 步距 0.72r → 平滑融合
+    py += Math.sin(ang) * pr * 0.72;
+    pr *= 0.76 + rng.rand() * 0.06;                          // 縮得慢 → 錐形漸收
+    if (pr < 0.016 * k) break;
   }
-  // 側邊小火苗（反方向、短小）
-  if (rng.rand() > 0.35) {
-    let sx = 0.5 - dir * 0.13 * k, sy = 0.56, sr = 0.06 * k;
-    for (let t = 0; t < 2; t++) {
-      blobs.push({ x: sx, y: sy, r: sr });
-      sx -= dir * sr * 0.7; sy -= sr * 0.9; sr *= 0.6;
-    }
+  // 第二短火舌（反側）→ 經典雙尖火焰
+  let sx = cx - dir * 0.085 * k, sy = 0.55, sr = 0.07 * k;
+  const nT2 = 2 + Math.round(rng.rand() * 2);
+  for (let t = 0; t < nT2; t++) {
+    blobs.push({ x: sx, y: sy, r: sr });
+    sx -= dir * sr * 0.35; sy -= sr * 0.80; sr *= 0.68;
   }
-  // 負空間洞（參考圖的鏤空）
+  // 內焰：外焰縮小 62%、錨定在底部中心 → 自帶火舌尖的內層形狀（經典卡通兩色調）
+  const ax = cx, ay = 0.76;
+  const core = blobs.map(b => ({ x: ax + (b.x - ax) * 0.62, y: ay + (b.y - ay) * 0.62, r: b.r * 0.55 }));
+  // 負空間洞：外焰內、內焰外的縫隙處
   const holes = [];
   if (rng.rand() > 0.3)
-    holes.push({ x: 0.5 + (rng.rand() - 0.5) * 0.12, y: 0.62 + (rng.rand() - 0.5) * 0.08, r: (0.03 + rng.rand() * 0.03) * k });
-  // 著色：聯集深度 → 核心亮 / 邊緣暗（兩色調、無方向性 → 火舌不會有條紋）
+    holes.push({ x: cx + dir * (0.09 + rng.rand() * 0.04) * k, y: 0.60 + (rng.rand() - 0.5) * 0.06, r: (0.022 + rng.rand() * 0.022) * k });
   const wobX = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9e37) >>> 0, 1);
   const wobY = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51ab) >>> 0, 1);
+  function hitN(list, qx, qy) {
+    let h = 0;
+    for (const b of list) {
+      const dx = qx - b.x, dy = qy - b.y, d2 = dx * dx + dy * dy;
+      if (d2 < b.r * b.r) { const hv = Math.sqrt(1 - d2 / (b.r * b.r)); if (hv > h) h = hv; }
+    }
+    return h;
+  }
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
     for (let i = 0; i < size; i++) {
       const idx = j * size + i;
-      const px = i / size + (wobX[idx] - 0.5) * 0.035;
-      const py = j / size + (wobY[idx] - 0.5) * 0.035;
-      let hN = 0;
-      for (const b of blobs) {
-        const dx = px - b.x, dy = py - b.y, d2 = dx * dx + dy * dy;
-        if (d2 < b.r * b.r) { const hv = Math.sqrt(1 - d2 / (b.r * b.r)); if (hv > hN) hN = hv; }
-      }
+      const qx = i / size + (wobX[idx] - 0.5) * 0.032;
+      const qy = j / size + (wobY[idx] - 0.5) * 0.032;
+      const hN = hitN(blobs, qx, qy);
       if (hN <= 0) { out[idx] = 0; continue; }
       let inHole = false;
-      for (const ho of holes) { const dx = px - ho.x, dy = py - ho.y; if (dx * dx + dy * dy < ho.r * ho.r) { inHole = true; break; } }
+      for (const ho of holes) { const dx = qx - ho.x, dy = qy - ho.y; if (dx * dx + dy * dy < ho.r * ho.r) { inHole = true; break; } }
       if (inHole) { out[idx] = 0; continue; }
-      const tone = hN > 0.52 ? 0.95 : 0.58;                  // 核心亮 / 外緣暗焰
+      // 內焰形狀決定亮部（自帶尖端） / 其餘為暗焰
+      const tone = hitN(core, qx, qy) > 0.12 ? 0.95 : 0.58;
       out[idx] = tone * Math.min(1, hN / 0.10);              // 邊緣 AA
     }
   }
@@ -1164,11 +1173,6 @@ function generateInkRing(size, octaves, seed, freqScale) {
   return out;
 }
 
-// 噪波：無縫 fbm 灰階（溶解遮罩 / 能量擾動圖，引擎 dissolve 直接可用）
-function generateNoiseTex(size, octaves, seed, freqScale) {
-  return normalize(fbm(size, octaves, 3, 2.0, 0.5, seed, Math.max(0.02, freqScale)));
-}
-
 
 // ============================================================
 // Generator map / labels / groups
@@ -1191,7 +1195,6 @@ const GENERATORS = {
   groundcrack:generateGroundCrack,
   splatter:   generateSplatter,
   inkring:    generateInkRing,
-  noisetex:   generateNoiseTex,
 };
 
 const TYPE_LABELS = [
@@ -1212,7 +1215,6 @@ const TYPE_LABELS = [
   ['groundcrack','🕸 GroundCrack 地裂裂紋'],
   ['splatter',   '🩸 Splatter    飛濺液滴'],
   ['inkring',    '⭕ InkRing     手繪墨圈'],
-  ['noisetex',   '🌫 Noise       溶解噪波'],
 ];
 const TYPE_MAP = Object.fromEntries(TYPE_LABELS);
 
@@ -1225,7 +1227,6 @@ const TYPE_GROUPS = [
   { label: '火焰 Fire',   keys: ['flame'] },
   { label: '液體 Liquid', keys: ['splatter'] },
   { label: '魔法 Magic',  keys: ['inkring'] },
-  { label: '工具 Utility',keys: ['noisetex'] },
 ];
 
 // ============================================================

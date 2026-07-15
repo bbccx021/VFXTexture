@@ -14,15 +14,13 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 **石頭 Rock** — Rock 程序化石頭（不規則多邊形硬邊輪廓、低多邊形平面刻面、頂部亮面）
 
-**火焰 Fire** — Flame 程序化火焰（卡通煙團式圓滾滾團塊 + 彎曲火舌、亮核暗焰兩色調、負空間洞）
+**火焰 Fire** — Flame 程序化火焰（寬圓潤多瓣身體 + 雙尖火舌、自帶尖端的內焰亮部、負空間洞 —— 經典卡通兩層火）
 
 **爆發 Burst** — Shockwave 衝擊波環、MuzzleFlash 槍口火光、Sparks 星形火花、GroundCrack 地裂裂紋
 
 **液體 Liquid** — Splatter 飛濺液滴（血 / 毒 / 黏液通用，配 ramp 換色）
 
 **魔法 Magic** — InkRing 手繪墨圈（debuff 圈 / 印記）
-
-**工具 Utility** — Noise 無縫溶解噪波（引擎 dissolve 遮罩直接可用）
 
 ## 功能 / Features
 
