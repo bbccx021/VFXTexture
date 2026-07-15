@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FX Sprite Lab — Effect Texture Generator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#19191c;--panel:#2a2a2f;--accent:#e4e4e9;
+  --text:#d6d6da;--dim:#8b8b92;
+  --green:#4ade80;--blue:#a1a1aa;--red:#f87171;
+  --entry:#212126;--surface:#0d0d0f;
+  --border:#36363c;--sel-text:#111114;
+}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;height:100vh;overflow:hidden}
+/* ── Layout ─── */
+.app{width:100%;height:100vh;padding:12px 24px;display:flex;flex-direction:column;gap:0}
+h1{
+  color:var(--text);font-size:16px;font-weight:600;letter-spacing:.02em;
+  padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px;flex-shrink:0;
+  display:flex;align-items:center;gap:8px
+}
+h1::before{content:'';display:inline-block;width:3px;height:14px;background:var(--accent);border-radius:2px}
+.main{display:flex;gap:14px;flex:1;min-height:0;overflow:hidden}
+.left{flex:0 0 300px;display:flex;flex-direction:column;gap:0;overflow-y:auto;padding-right:8px}
+.right{flex:1;min-width:0;min-height:0;display:flex;gap:10px;align-items:flex-start;overflow:hidden}
+#main-panel{flex:1;min-width:0;max-width:calc(100vh - 130px)}
+.thumbs{flex:0 0 clamp(140px, calc((100vh - 202px)/3), 230px);display:flex;flex-direction:column;gap:10px;max-height:100%;overflow-y:auto;padding-right:2px}
+.thumbs .preview-col>.panel-header{cursor:pointer;user-select:none}
+.fold-arrow{color:var(--dim);font-size:9px;flex-shrink:0}
+.preview-col.collapsed canvas{display:none}
+#preview-tabs{display:none}
+.hdr-slider{width:60px;flex:none;accent-color:var(--accent);height:3px;min-width:0}
+/* Collapsible sections */
+details.section{border-bottom:1px solid var(--border)}
+details.section:last-child{border-bottom:none}
+details.section>summary{list-style:none;cursor:pointer;color:var(--dim);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:10px 0 5px;display:flex;align-items:center;gap:6px;user-select:none}
+details.section>summary::-webkit-details-marker{display:none}
+details.section>summary::before{content:'';display:inline-block;width:2px;height:9px;background:var(--accent);border-radius:1px;opacity:.7}
+details.section>summary::after{content:'▾';color:var(--dim);font-size:9px;margin-left:auto}
+details.section:not([open])>summary::after{content:'▸'}
+details.section>summary:hover{color:var(--text)}
+details.sub>summary{list-style:none;cursor:pointer;color:var(--dim);font-size:12px;padding:6px 0 4px;user-select:none;opacity:.8}
+details.sub>summary::-webkit-details-marker{display:none}
+details.sub>summary::before{content:'▸ ';font-size:9px}
+details.sub[open]>summary::before{content:'▾ '}
+details.sub>summary:hover{color:var(--text)}
+.type-group-lbl{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding:7px 12px 3px;opacity:.65;pointer-events:none;list-style:none}
+.res-info{color:var(--dim);font-size:11px;font-family:'Consolas',monospace;white-space:nowrap}
+.hotkey-hint{color:var(--dim);font-size:12px;opacity:.5;white-space:nowrap;display:none}
+@media(min-width:900px){.hotkey-hint{display:block}}
+/* ── Type list ── */
+#type-list{list-style:none;background:var(--entry);border-radius:8px;max-height:260px;overflow-y:auto;border:1px solid var(--border)}
+#type-list li{padding:7px 12px;cursor:pointer;font-size:13px;white-space:nowrap;transition:background .1s;border-radius:0}
+#type-list li:first-child{border-radius:7px 7px 0 0}
+#type-list li:last-child{border-radius:0 0 7px 7px}
+#type-list li:hover{background:var(--panel)}
+#type-list li.sel{background:var(--accent);color:var(--sel-text);font-weight:600}
+/* ── Controls ── */
+.radio-row{display:flex;gap:6px;flex-wrap:wrap;padding:2px 0}
+.radio-row label{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px}
+input[type=radio]{accent-color:var(--accent)}
+.chk-row{display:flex;align-items:center;gap:6px;padding:3px 0}
+.chk-row label{cursor:pointer;font-size:13px;color:var(--dim)}
+input[type=checkbox]{accent-color:var(--accent)}
+.sl-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+.sl-row .sl-lbl{color:var(--dim);font-size:12px;white-space:nowrap;min-width:44px}
+.sl-row .sl-val{color:var(--accent);font-weight:700;font-size:13px;min-width:48px;text-align:right;font-family:'Consolas',monospace}
+input[type=range]{flex:1;accent-color:var(--accent);height:3px}
+input[type=number]{background:var(--entry);color:var(--text);border:1px solid var(--border);
+  border-radius:6px;padding:5px 9px;font-family:'Consolas',monospace;font-size:13px;outline:none;width:80px;transition:border-color .15s}
+input[type=number]:focus{border-color:var(--accent)}
+.seed-row{display:flex;gap:6px;align-items:center}
+/* ── Buttons ── */
+.btn{border:none;border-radius:7px;padding:9px 20px;font-family:'Segoe UI',system-ui,sans-serif;
+  font-weight:600;cursor:pointer;font-size:14px;transition:filter .12s,transform .08s;letter-spacing:.01em}
+.btn:hover{filter:brightness(1.1)}
+.btn:active{transform:scale(.97)}
+.btn-save{background:var(--accent);color:var(--sel-text)}
+.btn-batch{background:var(--panel);color:var(--text);border:1px solid var(--border)}
+.btn-batch:hover{background:var(--entry);filter:none}
+.btn-rand{background:var(--entry);color:var(--dim);font-size:12px;padding:5px 12px;border:1px solid var(--border);border-radius:5px}
+.btn-rand:hover{color:var(--text);background:var(--panel)}
+/* ── Canvas panel ── */
+.preview-col{min-width:0;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.panel-header{background:var(--panel);padding:6px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);flex-shrink:0}
+canvas{display:block;background:var(--surface);width:100%;aspect-ratio:1;border-radius:0;border:none}
+#status{color:var(--dim);font-size:12px;min-height:18px;padding:4px 0;font-family:'Consolas',monospace}
+#live-lbl{font-size:12px;color:var(--green);font-weight:600}
+.bottom{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0 3px;border-top:1px solid var(--border);margin-top:6px;flex-shrink:0}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+.tile-btn{background:var(--entry);color:var(--dim);border:1px solid var(--border);border-radius:5px;
+  padding:2px 8px;cursor:pointer;font-family:'Segoe UI',system-ui,sans-serif;font-size:11px;font-weight:500;transition:background .1s}
+.tile-btn:hover{color:var(--text)}
+.tile-btn.active{background:var(--accent);color:var(--sel-text);border-color:var(--accent)}
+#progress{height:2px;background:var(--accent);transition:width .2s;border-radius:2px;margin-top:2px}
+#progress-wrap{background:var(--border);border-radius:2px;overflow:hidden;display:none}
+/* ── Responsive ── */
+@media(max-width:640px){
+  body{overflow:auto}
+  .app{padding:10px 14px;height:auto}
+  h1{font-size:14px;padding-bottom:8px;margin-bottom:8px}
+  .main{flex-direction:column;gap:10px;overflow:visible}
+  .left{flex:none;width:100%;order:2}
+  .right{flex:none;width:100%;order:1;flex-direction:column;overflow:visible;max-height:none}
+  #main-panel{flex:none;width:100%;max-width:none}
+  #main-panel canvas{width:100%}
+  .thumbs{flex:none;width:100%;max-height:none;overflow:visible}
+  #preview-tabs{display:flex;gap:4px;margin-bottom:6px}
+  #preview-tabs .type-tab{white-space:nowrap;padding:6px 0}
+  #type-list{max-height:180px}
+  .bottom{gap:8px}
+  .btn-save,.btn-batch{flex:1 1 100%;text-align:center}
+}
+.type-tab{flex:1;background:var(--entry);color:var(--dim);border:1px solid var(--border);border-radius:6px;
+  padding:7px 0;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:.04em;transition:background .12s,color .12s}
+.type-tab:hover{color:var(--text);background:var(--panel)}
+.type-tab.active{background:var(--accent);color:var(--sel-text);border-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>FX Sprite Lab — Effect Texture Generator
+    <button id="lang-btn" class="btn btn-rand" style="margin-left:auto" onclick="setLang(LANG==='en'?'zh':'en')">EN</button>
+    <span style="font-size:10px;color:var(--dim);font-weight:400;margin-left:8px">v1.0</span>
+  </h1>
+  <div class="main">
+    <!-- ── Left panel ── -->
+    <div class="left">
+      <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_type">特效類型</summary>
+        <ul id="type-list"></ul>
+      </details>
+
+      <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_res">解析度</summary>
+        <div class="radio-row" id="size-row" style="padding-bottom:4px"></div>
+      </details>
+
+      <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_seed">隨機種子</summary>
+        <div class="seed-row" style="padding-bottom:6px">
+          <input type="number" id="seed" value="42" min="0" max="99999">
+          <button class="btn btn-rand" data-i18n="btn_rand" onclick="randomSeed()">🎲 隨機</button>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_param">參數調整</summary>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_detail">細節層</span>
+          <input type="range" id="octaves" min="4" max="12" value="8">
+          <span class="sl-val" id="octaves-val">8</span>
+        </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_zoom">縮放</span>
+          <input type="range" id="zoom" min="1" max="16" value="4">
+          <span class="sl-val" id="zoom-val">1.00×</span>
+        </div>
+        <div class="radio-row" id="cmap-row" style="padding:4px 0 6px"></div>
+      </details>
+
+      <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_post">後處理</summary>
+        <canvas id="hist" height="36" style="width:100%;height:36px;background:var(--surface);border:1px solid var(--border);border-radius:4px;display:block;margin:2px 0 4px"></canvas>
+        <div class="chk-row" style="gap:8px">
+          <input type="checkbox" id="invert"><label for="invert" data-i18n="chk_invert">反轉</label>
+          <button class="btn btn-rand" data-i18n="btn_auto" style="margin-left:auto" onclick="autoLevels()">⚡ 自動色階</button>
+          <button class="btn btn-rand" data-i18n="btn_reset" onclick="resetPost()">重設</button>
+        </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_contrast">對比</span>
+          <input type="range" id="contrast" min="50" max="250" value="100">
+          <span class="sl-val" id="contrast-val">1.00×</span>
+        </div>
+        <div class="sl-row">
+          <span class="sl-lbl">Gamma</span>
+          <input type="range" id="gamma" min="2" max="30" value="10">
+          <span class="sl-val" id="gamma-val">1.0×</span>
+        </div>
+        <details class="sub">
+          <summary data-i18n="adv_levels">進階（黑點 / 白點 / 亮度）</summary>
+          <div class="sl-row">
+            <span class="sl-lbl" data-i18n="lbl_black">黑點</span>
+            <input type="range" id="lev-lo" min="0" max="95" value="0">
+            <span class="sl-val" id="lev-lo-val">0.00</span>
+          </div>
+          <div class="sl-row">
+            <span class="sl-lbl" data-i18n="lbl_white">白點</span>
+            <input type="range" id="lev-hi" min="5" max="100" value="100">
+            <span class="sl-val" id="lev-hi-val">1.00</span>
+          </div>
+          <div class="sl-row">
+            <span class="sl-lbl" data-i18n="lbl_bright">亮度</span>
+            <input type="range" id="bright" min="-10" max="10" value="0">
+            <span class="sl-val" id="bright-val">0.0</span>
+          </div>
+        </details>
+      </details>
+
+      <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_batch">批次下載</summary>
+        <div class="sl-row" style="padding-bottom:2px">
+          <span class="sl-lbl" data-i18n="lbl_count">數量</span>
+          <input type="number" id="count" value="5" min="1" max="50" style="width:60px">
+        </div>
+        <div class="chk-row" style="padding-bottom:6px">
+          <input type="checkbox" id="all-types">
+          <label for="all-types" data-i18n="chk_alltypes">全部類型一起生成</label>
+        </div>
+      </details>
+    </div>
+
+    <!-- ── Right panel ── -->
+    <div class="right">
+      <div id="preview-tabs"></div>
+      <div class="preview-col" id="main-panel">
+        <div class="panel-header">
+          <span id="live-lbl" style="font-size:12px;font-weight:600;color:var(--green)">⬤ 即時預覽</span>
+          <span id="res-info" class="res-info" style="margin-left:auto"></span>
+        </div>
+        <canvas id="preview" width="300" height="300"></canvas>
+      </div>
+
+      <div class="thumbs">
+        <div id="tile-section" class="preview-col">
+          <div class="panel-header">
+            <span class="fold-arrow">▾</span>
+            <span style="font-size:12px;font-weight:600;color:var(--dim)" data-i18n="pv_tile">拼貼</span>
+            <span id="tile-btns" style="margin-left:auto"></span>
+          </div>
+          <canvas id="tile-canvas" width="300" height="300"></canvas>
+        </div>
+
+        <div id="dissolve-section" class="preview-col">
+          <div class="panel-header">
+            <span class="fold-arrow">▾</span>
+            <span style="font-size:12px;font-weight:600;color:var(--dim)" data-i18n="pv_dissolve">溶解</span>
+            <input type="range" id="dissolve-t" min="0" max="100" value="50" class="hdr-slider" style="margin-left:auto">
+            <span id="dissolve-t-val" class="res-info" style="min-width:28px;text-align:right">50%</span>
+          </div>
+          <canvas id="dissolve-canvas" width="300" height="300"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bottom bar ── -->
+  <div class="bottom">
+    <button class="btn btn-save" data-i18n="btn_save" onclick="saveSingle()">↓ 下載 PNG</button>
+    <button class="btn btn-batch" data-i18n="btn_batch" onclick="batchGenerate()">⊞ 批次 ZIP</button>
+    <button class="btn btn-batch" data-i18n="btn_share" onclick="shareURL()">🔗 分享連結</button>
+    <div id="status" data-i18n="st_ready">就緒</div>
+    <div id="progress-wrap" style="width:80px"><div id="progress" style="width:0%"></div></div>
+    <div style="flex:1"></div>
+    <span class="hotkey-hint" data-i18n="hotkeys">Space 重新生成 &nbsp;·&nbsp; S 下載 &nbsp;·&nbsp; R 隨機種子</span>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
+
+<script>
+"use strict";
+
+// ============================================================
+// i18n — 中文 / English
+// ============================================================
+let LANG = (function(){ try { return localStorage.getItem('fxsprite_lang') || 'zh'; } catch(e){ return 'zh'; } })();
+const I18N = {
+  sec_type:['特效類型','Effect Type'], sec_res:['解析度','Resolution'], sec_seed:['隨機種子','Random Seed'],
+  sec_param:['參數調整','Parameters'], sec_post:['後處理','Post-Process'], sec_batch:['批次下載','Batch Export'],
+  adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
+  lbl_detail:['細節層','Octaves'], lbl_zoom:['縮放','Scale'], lbl_contrast:['對比','Contrast'],
+  lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
+  chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
+  btn_rand:['🎲 隨機','🎲 Random'], btn_auto:['⚡ 自動色階','⚡ Auto Levels'], btn_reset:['重設','Reset'],
+  btn_save:['↓ 下載 PNG','↓ Save PNG'], btn_batch:['⊞ 批次 ZIP','⊞ Batch ZIP'], btn_share:['🔗 分享連結','🔗 Share Link'],
+  cm_gray:['灰階','Gray'], cm_gold:['金色','Gold'], cm_plasma:['Plasma','Plasma'],
+  cm_fire:['火焰','Fire'], cm_ice:['冰','Ice'], cm_electric:['電','Electric'], cm_toxic:['毒','Toxic'], cm_magma:['熔岩','Magma'],
+  pv_tile:['拼貼','Tile'], pv_dissolve:['溶解','Dissolve'],
+  tab_live:['即時','Live'], tab_tile:['拼貼','Tile'], tab_dissolve:['溶解','Dissolve'],
+  g_strike:['打擊 Strike','Strike'], g_glow:['光暈 Glow','Glow'],
+  st_ready:['就緒','Ready'], live_live:['⬤ 即時預覽','⬤ Live'],
+  hotkeys:['Space 重新生成  ·  S 下載  ·  R 隨機種子','Space regen  ·  S save  ·  R reseed'],
+};
+function t(k){ const e = I18N[k]; return e ? e[LANG === 'en' ? 1 : 0] : k; }
+function typeLabelDisp(raw){ return LANG === 'en' ? raw.replace(/\s*[一-鿿].*$/, '') : raw; }
+const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow'};
+const PVTAB_I18N = {live:'tab_live',tile:'tab_tile',dissolve:'tab_dissolve'};
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  const lb = document.getElementById('lang-btn');
+  if (lb) lb.textContent = LANG === 'en' ? '中文' : 'EN';
+  document.documentElement.lang = LANG === 'en' ? 'en' : 'zh-TW';
+}
+function setLang(l) {
+  LANG = l;
+  try { localStorage.setItem('fxsprite_lang', l); } catch(e){}
+  applyI18n();
+  buildCmapRadios(); buildTypeList(); applyPreviewTab();
+  updateResInfo();
+  setLive(t('live_live'), 'var(--green)');
+}
+
+// ============================================================
+// PRNG — xorshift32
+// ============================================================
+class RNG {
+  constructor(seed) { this.s = (seed >>> 0) || 1; }
+  next() {
+    let s = this.s;
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    this.s = s >>> 0;
+    return this.s / 4294967296;
+  }
+  rand() { return this.next(); }
+}
+
+// ============================================================
+// Core — seamless value noise + FBM
+// ============================================================
+function valueNoiseOctave(size, freq, seed) {
+  const rng = new RNG(seed);
+  const fp1 = freq + 1;
+  const grid = new Float32Array(freq * freq);
+  for (let i = 0; i < grid.length; i++) grid[i] = rng.rand();
+  const gp = new Float32Array(fp1 * fp1);
+  for (let y = 0; y < freq; y++)
+    for (let x = 0; x < freq; x++)
+      gp[y * fp1 + x] = grid[y * freq + x];
+  for (let x = 0; x < freq; x++) gp[freq * fp1 + x] = grid[x];
+  for (let y = 0; y < freq; y++) gp[y * fp1 + freq] = grid[y * freq];
+  gp[freq * fp1 + freq] = grid[0];
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const gy = j * freq / size;
+    const y0 = Math.floor(gy) | 0;
+    let ty = gy - y0;
+    ty = ty * ty * ty * (ty * (ty * 6 - 15) + 10);
+    const iy0 = y0 * fp1, iy1 = (y0 + 1) * fp1;
+    for (let i = 0; i < size; i++) {
+      const gx = i * freq / size;
+      const x0 = Math.floor(gx) | 0;
+      let tx = gx - x0;
+      tx = tx * tx * tx * (tx * (tx * 6 - 15) + 10);
+      out[j * size + i] =
+        gp[iy0+x0]*(1-tx)*(1-ty) + gp[iy0+x0+1]*tx*(1-ty) +
+        gp[iy1+x0]*(1-tx)*ty     + gp[iy1+x0+1]*tx*ty;
+    }
+  }
+  return out;
+}
+
+function fbm(size, octaves=8, baseFreq=2, lacunarity=2.0, persistence=0.55, seed=0, freqScale=1.0) {
+  const rng = new RNG(seed);
+  const result = new Float32Array(size * size);
+  let amp = 1.0, total = 0.0;
+  let freq = Math.max(1, Math.round(baseFreq * freqScale));
+  for (let oct = 0; oct < octaves; oct++) {
+    if (freq > size) break;
+    const layer = valueNoiseOctave(size, freq, Math.floor(rng.rand() * 999999));
+    for (let i = 0; i < result.length; i++) result[i] += layer[i] * amp;
+    total += amp; amp *= persistence; freq = Math.floor(freq * lacunarity);
+  }
+  for (let i = 0; i < result.length; i++) result[i] /= total;
+  return result;
+}
+
+function mapCoordsBilinear(arr, H, W, coordsY, coordsX) {
+  const N = coordsY.length, out = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    const py = ((coordsY[i] % H) + H) % H;
+    const px = ((coordsX[i] % W) + W) % W;
+    const y0 = Math.floor(py) | 0, x0 = Math.floor(px) | 0;
+    const y1 = (y0+1) % H, x1 = (x0+1) % W;
+    const fy = py - Math.floor(py), fx = px - Math.floor(px);
+    out[i] = arr[y0*W+x0]*(1-fy)*(1-fx) + arr[y0*W+x1]*(1-fy)*fx +
+             arr[y1*W+x0]*fy*(1-fx)     + arr[y1*W+x1]*fy*fx;
+  }
+  return out;
+}
+
+function normalize(arr) {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < arr.length; i++) { if (arr[i] < lo) lo = arr[i]; if (arr[i] > hi) hi = arr[i]; }
+  const r = hi - lo + 1e-8, out = new Float32Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = (arr[i] - lo) / r;
+  return out;
+}
+
+function sstep(e0, e1, x) {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+function segDist(px, py, ax, ay, bx, by) {
+  const vx = bx - ax, vy = by - ay;
+  const wx = px - ax, wy = py - ay;
+  const L2 = vx * vx + vy * vy;
+  let t = L2 > 0 ? (wx * vx + wy * vy) / L2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const dx = px - (ax + vx * t), dy = py - (ay + vy * t);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// ============================================================
+// Generators — 8 種特效 sprite
+// ============================================================
+function generateSlash(size, octaves, seed, freqScale) {
+  const base = fbm(size, octaves, 4, 2.0, 0.5, seed, 1);
+  const N = size * size;
+  const rows = new Float32Array(N), cols = new Float32Array(N);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const idx = j * size + i;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      const a = Math.atan2(dy, dx) / (Math.PI * 2) + 0.5;
+      cols[idx] = a * size * 0.25;                          // 沿弧向拉長
+      rows[idx] = r * size * 2.2 * freqScale;               // 跨半徑細變化 → 拖絲
+    }
+  }
+  const str = mapCoordsBilinear(base, size, size, rows, cols);
+  const out = new Float32Array(N);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const idx = j * size + i;
+      const r = Math.sqrt(dx * dx + dy * dy);
+      const a = Math.abs(Math.atan2(dy, dx));
+      const band = sstep(0.20, 0.30, r) * (1 - sstep(0.42, 0.52, r));
+      const arcT = 1 - sstep(1.3, 2.5, a);
+      const edgeB = sstep(0.30, 0.45, r);                   // 外緣較利較亮
+      const v = band * arcT * (0.35 + edgeB * 1.1) * (0.5 + str[idx] * 0.9);
+      out[idx] = Math.max(0, Math.min(1, v));
+    }
+  }
+  return out;
+}
+
+function generateBolt(size, octaves, seed, freqScale) {
+  const rng = new RNG(seed);
+  const segs = [];
+  const wBase = 0.0075 / Math.max(0.5, freqScale);
+  function fractalPath(x0, y0, x1, y1, levels, jag) {
+    let pts = [{ x: x0, y: y0 }, { x: x1, y: y1 }];
+    for (let l = 0; l < levels; l++) {
+      const np = [pts[0]];
+      for (let k = 1; k < pts.length; k++) {
+        const a = pts[k - 1], b = pts[k];
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1e-6;
+        const disp = (rng.rand() - 0.5) * jag * len * 2;
+        np.push({ x: mx - dy / len * disp, y: my + dx / len * disp });
+        np.push(b);
+      }
+      pts = np;
+    }
+    return pts;
+  }
+  function addBolt(pts, w0, w1, b0, b1) {
+    const n = pts.length - 1;
+    for (let k = 0; k < n; k++) {
+      const t = k / n;
+      segs.push({
+        ax: pts[k].x, ay: pts[k].y, bx: pts[k + 1].x, by: pts[k + 1].y,
+        w: Math.max(1e-4, w0 + (w1 - w0) * t),
+        b: (b0 + (b1 - b0) * t) * (0.8 + rng.rand() * 0.35),
+      });
+    }
+  }
+  const xTop = 0.5 + (rng.rand() - 0.5) * 0.10;
+  const xBot = 0.5 + (rng.rand() - 0.5) * 0.16;
+  const main = fractalPath(xTop, 0.02, xBot, 0.98, 5, 0.5);
+  addBolt(main, wBase, wBase * 0.45, 1.0, 0.85);
+  const nBr = 2 + Math.floor(rng.rand() * 2) + Math.round(octaves / 8);
+  for (let b = 0; b < nBr; b++) {
+    const pi = 3 + Math.floor(rng.rand() * (main.length - 8));
+    const p = main[pi];
+    const dir = rng.rand() < 0.5 ? -1 : 1;
+    const ex = p.x + dir * (0.08 + rng.rand() * 0.16);
+    const ey = Math.min(0.99, p.y + 0.12 + rng.rand() * 0.18);
+    const bp = fractalPath(p.x, p.y, ex, ey, 4, 0.45);
+    addBolt(bp, wBase * 0.45, wBase * 0.08, 0.5, 0.08);
+    if (rng.rand() > 0.6) {
+      const spi = 2 + Math.floor(rng.rand() * (bp.length - 4));
+      const sp = bp[spi];
+      const sp2 = fractalPath(sp.x, sp.y,
+        sp.x + dir * (0.06 + rng.rand() * 0.12),
+        Math.min(0.99, sp.y + 0.10 + rng.rand() * 0.12), 3, 0.45);
+      addBolt(sp2, wBase * 0.25, wBase * 0.05, 0.4, 0.06);
+    }
+  }
+  const margin = wBase * 26;
+  const rowSegs = Array.from({ length: size }, () => []);
+  for (let si = 0; si < segs.length; si++) {
+    const sg = segs[si];
+    const y0 = Math.max(0, Math.floor((Math.min(sg.ay, sg.by) - margin) * size));
+    const y1 = Math.min(size - 1, Math.ceil((Math.max(sg.ay, sg.by) + margin) * size));
+    for (let j = y0; j <= y1; j++) rowSegs[j].push(si);
+  }
+  const endX = main[main.length - 1].x, endY = main[main.length - 1].y;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const py = j / size;
+    const list = rowSegs[j];
+    for (let i = 0; i < size; i++) {
+      const px = i / size;
+      let v = 0;
+      for (let s = 0; s < list.length; s++) {
+        const sg = segs[list[s]];
+        const d = segDist(px, py, sg.ax, sg.ay, sg.bx, sg.by);
+        if (d > sg.w * 24) continue;
+        const q = d / sg.w;
+        v += sg.b * (Math.exp(-q * q) + Math.exp(-q * q / 12) * 0.28 + Math.exp(-q * q / 120) * 0.08);
+      }
+      const edx = px - endX, edy = py - endY;
+      v += Math.exp(-(edx * edx + edy * edy) / 0.0009) * 0.55;
+      out[j * size + i] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+function generateCrossSlash(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 2654435761) >>> 0 || 1); rng.next();
+  const k = Math.max(0.5, Math.min(1.4, freqScale));
+  const rot = rng.rand() * Math.PI;
+  const angles = [rot + 0.55 + (rng.rand() - 0.5) * 0.25, rot - 0.75 + (rng.rand() - 0.5) * 0.25];
+  if (octaves >= 11) angles.push(rot + 1.55 + (rng.rand() - 0.5) * 0.3);
+  const lens = angles.map(() => (0.36 + rng.rand() * 0.10) * k);
+  const wids = angles.map(() => 0.030 + rng.rand() * 0.014);
+  const brs  = angles.map(() => 0.85 + rng.rand() * 0.15);
+  const cosA = angles.map(Math.cos), sinA = angles.map(Math.sin);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      let b = 0;
+      for (let s = 0; s < angles.length; s++) {
+        const tt = dx * cosA[s] + dy * sinA[s];
+        const at = Math.abs(tt);
+        if (at >= lens[s]) continue;
+        const p = Math.abs(-dx * sinA[s] + dy * cosA[s]);
+        const w = wids[s] * (1 - at / lens[s]);
+        const edge = 1 - sstep(w * 0.55, w, p);
+        b = Math.max(b, edge * brs[s] * (0.78 + 0.35 * (1 - at / lens[s])));
+      }
+      const core = Math.exp(-(dx * dx + dy * dy) / 0.003) * 0.9;
+      out[j * size + i] = Math.min(1, b + core);
+    }
+  }
+  return out;
+}
+
+function generateGlint(size, octaves, seed, freqScale) {
+  const k = 1 / Math.max(0.25, freqScale);
+  const k2 = k * k;
+  const diagW = Math.max(0, Math.min(1, (octaves - 4) / 6));
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r2 = dx * dx + dy * dy;
+      const h = Math.exp(-(dy * dy) / (0.00002 * k2)) * Math.exp(-(dx * dx) / (0.05 * k2));
+      const ve = Math.exp(-(dx * dx) / (0.00002 * k2)) * Math.exp(-(dy * dy) / (0.05 * k2));
+      const d1 = (dx - dy) * 0.7071, d2 = (dx + dy) * 0.7071;
+      const di = (Math.exp(-(d1 * d1) / (0.00001 * k2)) + Math.exp(-(d2 * d2) / (0.00001 * k2)))
+               * Math.exp(-r2 / (0.012 * k2)) * 0.5 * diagW;
+      out[j * size + i] = Math.min(1, Math.exp(-r2 / (0.0015 * k2)) + h + ve + di);
+    }
+  }
+  return out;
+}
+
+function generateGlow(size, octaves, seed, freqScale) {
+  const k = 1 / Math.max(0.25, freqScale);
+  const sCore = 0.018 * k * k;
+  const sHalo = sCore * 5;
+  const haloW = 0.12 + octaves * 0.02;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r2 = dx * dx + dy * dy;
+      out[j * size + i] = Math.min(1, Math.exp(-r2 / sCore) + Math.exp(-r2 / sHalo) * haloW);
+    }
+  }
+  return out;
+}
+
+function generateStarGlow(size, octaves, seed, freqScale) {
+  const k = 1 / Math.max(0.25, freqScale);
+  const sCore = 0.012 * k * k;
+  const rays = octaves < 6 ? 4 : (octaves < 10 ? 6 : 8);   // octaves 控制芒數
+  const rng = new RNG(seed);
+  const rot = rng.rand() * Math.PI;
+  const ga = rot + 0.7;
+  const ghosts = [
+    { d: 0.17 * k, sz: 0.0009, b: 0.24 },
+    { d: 0.30 * k, sz: 0.0014, b: 0.15 },
+  ];
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r2 = dx * dx + dy * dy;
+      const r = Math.sqrt(r2);
+      const a = Math.atan2(dy, dx) + rot;
+      const ray = Math.pow(Math.abs(Math.cos(rays / 2 * a)), 22) * Math.exp(-r / (0.16 * k));
+      const sub = Math.pow(Math.abs(Math.cos(rays / 2 * a + Math.PI / rays)), 44) * Math.exp(-r / (0.10 * k)) * 0.45;
+      let ghost = 0;
+      for (let g = 0; g < ghosts.length; g++) {
+        const gx = Math.cos(ga) * ghosts[g].d, gy = Math.sin(ga) * ghosts[g].d;
+        const ddx = dx - gx, ddy = dy - gy;
+        ghost += Math.exp(-(ddx * ddx + ddy * ddy) / ghosts[g].sz) * ghosts[g].b;
+      }
+      const v = Math.exp(-r2 / sCore) + Math.exp(-r2 / (sCore * 6)) * 0.28 + ray * 0.85 + sub + ghost;
+      out[j * size + i] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+function generateRingGlow(size, octaves, seed, freqScale) {
+  const r0 = 0.30 * Math.max(0.4, Math.min(1.3, freqScale));
+  const haloW = 0.10 + octaves * 0.025;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r2 = dx * dx + dy * dy;
+      const r = Math.sqrt(r2);
+      const d = r - r0;
+      const v = Math.exp(-(d * d) / 0.0004) + Math.exp(-(d * d) / 0.006) * (0.25 + haloW) + Math.exp(-r2 / 0.002) * 0.3;
+      out[j * size + i] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+function generateAnamorph(size, octaves, seed, freqScale) {
+  const k = 1 / Math.max(0.25, freqScale);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r2 = dx * dx + dy * dy;
+      const streak = Math.exp(-(dy * dy) / (0.0009 * k * k)) * Math.exp(-(dx * dx) / (0.055 * k * k));
+      const thin   = Math.exp(-(dy * dy) / (0.00012 * k * k)) * Math.exp(-(dx * dx) / (0.10 * k * k)) * 0.6;
+      const core   = Math.exp(-r2 / (0.0035 * k * k)) * 0.75;
+      out[j * size + i] = Math.min(1, streak + thin + core);
+    }
+  }
+  return out;
+}
+
+// ============================================================
+// Generator map / labels / groups
+// ============================================================
+const GENERATORS = {
+  slash:      generateSlash,
+  bolt:       generateBolt,
+  crossslash: generateCrossSlash,
+  glint:      generateGlint,
+  glow:       generateGlow,
+  starglow:   generateStarGlow,
+  ringglow:   generateRingGlow,
+  anamorph:   generateAnamorph,
+};
+
+const TYPE_LABELS = [
+  ['slash',      '🗡 Slash       斬擊月牙'],
+  ['bolt',       '🌩 Bolt        閃電束'],
+  ['crossslash', '✖ CrossSlash  交叉斬痕'],
+  ['glint',      '✧ Glint        銳利閃點'],
+  ['glow',       '🔆 Glow        柔光光暈'],
+  ['starglow',   '✦ StarGlow    星芒光暈'],
+  ['ringglow',   '◎ RingGlow    光環光暈'],
+  ['anamorph',   '➖ Anamorphic 橫向光斑'],
+];
+const TYPE_MAP = Object.fromEntries(TYPE_LABELS);
+
+const TYPE_GROUPS = [
+  { label: '打擊 Strike', keys: ['slash','bolt','crossslash','glint'] },
+  { label: '光暈 Glow',   keys: ['glow','starglow','ringglow','anamorph'] },
+];
+
+// ============================================================
+// State
+// ============================================================
+let currentType = 'slash';
+let lastArr = null;
+let lastOut = null;
+let tileCount = 2;
+let debounceId = null;
+let isGenerating = false;
+const PREVIEW_CALC = 256;
+
+function getParams() {
+  return {
+    type:      currentType,
+    size:      parseInt(document.querySelector('input[name=size]:checked')?.value || '512'),
+    seed:      parseInt(document.getElementById('seed').value) || 42,
+    octaves:   parseInt(document.getElementById('octaves').value),
+    freqScale: parseInt(document.getElementById('zoom').value) / 4,
+    colormap:  document.querySelector('input[name=cmap]:checked')?.value || 'gray',
+    gamma:     parseInt(document.getElementById('gamma').value) / 10,
+    invert:    document.getElementById('invert').checked,
+    brightness:parseInt(document.getElementById('bright').value) / 10,
+    contrast:  parseInt(document.getElementById('contrast').value) / 100,
+    levLo:     parseInt(document.getElementById('lev-lo').value) / 100,
+    levHi:     parseInt(document.getElementById('lev-hi').value) / 100,
+    count:     parseInt(document.getElementById('count').value) || 5,
+    allTypes:  document.getElementById('all-types').checked,
+  };
+}
+
+function setStatus(msg, color='var(--dim)') {
+  const el = document.getElementById('status');
+  el.textContent = msg; el.style.color = color;
+}
+function setLive(text, color='var(--green)') {
+  const el = document.getElementById('live-lbl');
+  el.textContent = text; el.style.color = color;
+}
+function setProgress(pct) {
+  const wrap = document.getElementById('progress-wrap');
+  const bar  = document.getElementById('progress');
+  if (pct <= 0 || pct >= 100) { wrap.style.display='none'; return; }
+  wrap.style.display='block'; bar.style.width = pct+'%';
+}
+function randomSeed() {
+  document.getElementById('seed').value = Math.floor(Math.random()*99999);
+  schedulePreview();
+}
+
+// ============================================================
+// 後處理
+// ============================================================
+function postprocess(arr, gamma=1.0, invert=false, brightness=0.0, contrast=1.0, levLo=0.0, levHi=1.0) {
+  const out = new Float32Array(arr.length);
+  const range = Math.max(0.02, levHi - levLo);
+  for (let i = 0; i < arr.length; i++) {
+    let v = arr[i];
+    if (levLo !== 0 || levHi !== 1) v = Math.max(0, Math.min(1, (v - levLo) / range));
+    if (contrast !== 1) v = Math.max(0, Math.min(1, (v - 0.5) * contrast + 0.5));
+    if (gamma !== 1) v = Math.pow(Math.max(0, v), gamma);
+    if (brightness !== 0) v = Math.max(0, Math.min(1, v + brightness));
+    if (invert) v = 1 - v;
+    out[i] = v;
+  }
+  return out;
+}
+
+function autoLevels() {
+  if (!lastArr) return;
+  let lo = 1, hi = 0;
+  for (let i = 0; i < lastArr.length; i++) {
+    if (lastArr[i] < lo) lo = lastArr[i];
+    if (lastArr[i] > hi) hi = lastArr[i];
+  }
+  const loV = Math.max(0, Math.min(95, Math.round(lo * 100)));
+  const hiV = Math.max(loV + 5, Math.min(100, Math.round(hi * 100)));
+  document.getElementById('lev-lo').value = loV;
+  document.getElementById('lev-hi').value = hiV;
+  document.getElementById('lev-lo-val').textContent = (loV / 100).toFixed(2);
+  document.getElementById('lev-hi-val').textContent = (hiV / 100).toFixed(2);
+  setStatus(`⚡ ${(loV/100).toFixed(2)} ~ ${(hiV/100).toFixed(2)} → 0 ~ 1`, 'var(--green)');
+  renderTilePreview();
+}
+
+function resetPost() {
+  document.getElementById('invert').checked = false;
+  document.getElementById('lev-lo').value = 0;
+  document.getElementById('lev-hi').value = 100;
+  document.getElementById('contrast').value = 100;
+  document.getElementById('gamma').value = 10;
+  document.getElementById('bright').value = 0;
+  document.getElementById('lev-lo-val').textContent = '0.00';
+  document.getElementById('lev-hi-val').textContent = '1.00';
+  document.getElementById('contrast-val').textContent = '1.00×';
+  document.getElementById('gamma-val').textContent = '1.0×';
+  document.getElementById('bright-val').textContent = '0.0';
+  setStatus(t('st_ready'), 'var(--dim)');
+  if (lastArr) renderTilePreview();
+}
+
+// ============================================================
+// 色彩映射（gradient mapping）
+// ============================================================
+const VFX_RAMPS = {
+  fire:     [[0,0,0,0],[0.30,120,12,0],[0.55,232,70,4],[0.78,255,200,46],[1,255,255,225]],
+  ice:      [[0,2,4,12],[0.40,12,44,120],[0.70,42,162,224],[0.88,150,224,250],[1,235,250,255]],
+  electric: [[0,2,0,8],[0.40,62,12,122],[0.70,84,92,255],[0.90,156,202,255],[1,255,255,255]],
+  toxic:    [[0,0,6,0],[0.40,22,82,12],[0.70,82,202,32],[0.88,170,240,70],[1,224,255,150]],
+  magma:    [[0,0,0,0],[0.25,62,0,32],[0.50,182,22,10],[0.75,255,92,0],[1,255,232,124]],
+};
+function rampLookup(ramp, g) {
+  g = g < 0 ? 0 : g > 1 ? 1 : g;
+  for (let s = 1; s < ramp.length; s++) {
+    if (g <= ramp[s][0]) {
+      const a = ramp[s - 1], b = ramp[s];
+      const t = (g - a[0]) / (b[0] - a[0] + 1e-6);
+      return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
+    }
+  }
+  const last = ramp[ramp.length - 1]; return [last[1], last[2], last[3]];
+}
+
+function applyColormap(arr, colormap) {
+  const N = arr.length, out = new Uint8ClampedArray(N*4);
+  if (VFX_RAMPS[colormap]) {
+    const ramp = VFX_RAMPS[colormap];
+    for (let i = 0; i < N; i++) {
+      const c = rampLookup(ramp, arr[i]);
+      out[i*4] = c[0]; out[i*4+1] = c[1]; out[i*4+2] = c[2]; out[i*4+3] = 255;
+    }
+    return out;
+  }
+  if (colormap === 'gold') {
+    for (let i = 0; i < N; i++) {
+      const g = arr[i];
+      out[i*4]   = Math.round(Math.pow(Math.max(0,Math.min(1,g)),     0.55)*255);
+      out[i*4+1] = Math.round(Math.pow(Math.max(0,Math.min(1,g*0.78)),0.75)*255);
+      out[i*4+2] = Math.round(Math.pow(Math.max(0,Math.min(1,g*0.18)),1.50)*255);
+      out[i*4+3] = 255;
+    }
+  } else if (colormap === 'plasma') {
+    for (let i = 0; i < N; i++) {
+      const g = arr[i];
+      out[i*4]   = Math.round(Math.pow(Math.max(0,Math.min(1,g*1.20)),0.80)*255);
+      out[i*4+1] = Math.round(Math.pow(Math.max(0,Math.min(1,g*0.40)),1.50)*255);
+      out[i*4+2] = Math.round(Math.pow(Math.max(0,Math.min(1,g*1.50)),0.60)*255);
+      out[i*4+3] = 255;
+    }
+  } else {
+    for (let i = 0; i < N; i++) {
+      const v = Math.round(arr[i]*255);
+      out[i*4]=v; out[i*4+1]=v; out[i*4+2]=v; out[i*4+3]=255;
+    }
+  }
+  return out;
+}
+
+// ============================================================
+// Canvas rendering
+// ============================================================
+function arrToImageData(ctx, arr, size, colormap) {
+  const id = ctx.createImageData(size, size);
+  id.data.set(applyColormap(arr, colormap));
+  return id;
+}
+
+function renderToCanvas(canvas, arr, size, colormap) {
+  const ctx = canvas.getContext('2d');
+  const tmp = document.createElement('canvas');
+  tmp.width = size; tmp.height = size;
+  tmp.getContext('2d').putImageData(arrToImageData(tmp.getContext('2d'), arr, size, colormap), 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
+}
+
+function renderTiledCanvas(canvas, arr, size, tiles, colormap) {
+  const ctx = canvas.getContext('2d');
+  const tmp = document.createElement('canvas');
+  tmp.width = size; tmp.height = size;
+  tmp.getContext('2d').putImageData(arrToImageData(tmp.getContext('2d'), arr, size, colormap), 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingQuality = 'high';
+  const cell = canvas.width / tiles;
+  for (let ty = 0; ty < tiles; ty++)
+    for (let tx = 0; tx < tiles; tx++)
+      ctx.drawImage(tmp, tx*cell, ty*cell, cell, cell);
+}
+
+// ============================================================
+// Preview pipeline
+// ============================================================
+function schedulePreview() {
+  if (debounceId) clearTimeout(debounceId);
+  setLive(t('live_live') + '  ●', 'var(--dim)');
+  debounceId = setTimeout(runPreview, 0);
+}
+
+function runPreview() {
+  debounceId = null;
+  const p = getParams();
+  updateResInfo();
+  setLive('⬤ …', 'var(--accent)');
+  setTimeout(() => {
+    try {
+      lastArr = GENERATORS[p.type](PREVIEW_CALC, p.octaves, p.seed, p.freqScale);
+      renderTilePreview();
+      setLive(t('live_live'), 'var(--green)');
+      setStatus(`${p.type}  ${p.size}×${p.size}  seed=${p.seed}  oct=${p.octaves}  ×${p.freqScale.toFixed(2)}`, 'var(--green)');
+    } catch(e) {
+      setLive('⬤ ERR', 'var(--red)');
+      setStatus(`⚠ ${e.message}`, 'var(--red)');
+    }
+  }, 0);
+}
+
+function renderTilePreview() {
+  if (!lastArr) return;
+  const p = getParams();
+  const out = postprocess(lastArr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
+  lastOut = out;
+  renderToCanvas(document.getElementById('preview'), out, PREVIEW_CALC, p.colormap);
+  renderTiledCanvas(document.getElementById('tile-canvas'), out, PREVIEW_CALC, tileCount, p.colormap);
+  renderDissolve();
+  renderHistogram();
+}
+
+// ============================================================
+// 溶解預覽
+// ============================================================
+function renderDissolve() {
+  if (!lastOut) return;
+  const canvas = document.getElementById('dissolve-canvas');
+  const tVal = parseInt(document.getElementById('dissolve-t').value) / 100;
+  const edge = 0.06;
+  const n = PREVIEW_CALC;
+  const off = document.createElement('canvas');
+  off.width = n; off.height = n;
+  const ctx = off.getContext('2d');
+  const id = ctx.createImageData(n, n);
+  const d = id.data;
+  for (let i = 0; i < n * n; i++) {
+    const v = lastOut[i];
+    const o = i * 4;
+    if (v < tVal) {
+      d[o] = 12; d[o+1] = 12; d[o+2] = 14; d[o+3] = 255;
+    } else if (v < tVal + edge) {
+      d[o] = 255; d[o+1] = 255; d[o+2] = 255; d[o+3] = 255;
+    } else {
+      const g = 150 + ((v - tVal) * 70) | 0;
+      d[o] = g; d[o+1] = g; d[o+2] = g; d[o+3] = 255;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  const dctx = canvas.getContext('2d');
+  dctx.imageSmoothingEnabled = true;
+  dctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+}
+
+// ============================================================
+// 亮度直方圖
+// ============================================================
+function renderHistogram() {
+  const c = document.getElementById('hist');
+  if (!c || !lastOut || c.offsetWidth === 0) return;
+  if (c.width !== c.offsetWidth) c.width = c.offsetWidth;
+  const bins = new Float32Array(64);
+  for (let i = 0; i < lastOut.length; i++) {
+    bins[Math.min(63, (lastOut[i] * 64) | 0)]++;
+  }
+  let mx = 0;
+  for (let b = 0; b < 64; b++) if (bins[b] > mx) mx = bins[b];
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const bw = c.width / 64;
+  const css = getComputedStyle(document.documentElement);
+  ctx.fillStyle = css.getPropertyValue('--accent').trim() || '#e4e4e9';
+  for (let b = 0; b < 64; b++) {
+    const h = Math.sqrt(bins[b] / (mx || 1)) * (c.height - 4);
+    ctx.globalAlpha = 0.35 + (b / 64) * 0.5;
+    ctx.fillRect(b * bw, c.height - h, Math.max(1, bw - 1), h);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ============================================================
+// Export
+// ============================================================
+function arrToExportCanvas(arr, size, colormap) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const id = ctx.createImageData(size, size);
+  id.data.set(applyColormap(arr, colormap));
+  ctx.putImageData(id, 0, 0);
+  return canvas;
+}
+
+function canvasToBlob(canvas) {
+  return new Promise(res => canvas.toBlob(res, 'image/png'));
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function saveSingle() {
+  if (isGenerating) return;
+  const p = getParams();
+  isGenerating = true;
+  setStatus('…', 'var(--blue)');
+  setTimeout(async () => {
+    try {
+      const name = `${p.type}_${p.size}_${String(p.seed).padStart(4,'0')}.png`;
+      const arr = GENERATORS[p.type](p.size, p.octaves, p.seed, p.freqScale);
+      const out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
+      const canvas = arrToExportCanvas(out, p.size, p.colormap);
+      const blob = await canvasToBlob(canvas);
+      downloadBlob(blob, name);
+      setStatus(`✅ ${name}`, 'var(--green)');
+    } catch(e) {
+      setStatus(`⚠ ${e.message}`, 'var(--red)');
+    }
+    isGenerating = false;
+  }, 0);
+}
+
+async function batchGenerate() {
+  if (isGenerating) return;
+  const p = getParams();
+  const types = p.allTypes ? Object.keys(GENERATORS) : [p.type];
+  const total = types.length * p.count;
+  let done = 0;
+  isGenerating = true;
+  const useJSZip = typeof JSZip !== 'undefined';
+  const zip = useJSZip ? new JSZip() : null;
+  setStatus(`0/${total}`, 'var(--blue)');
+  setProgress(0);
+  for (const type of types) {
+    for (let i = 0; i < p.count; i++) {
+      const seed = p.seed + i;
+      const name = `${type}_${p.size}_${String(seed).padStart(4,'0')}.png`;
+      setStatus(`${done+1}/${total}  ${name}`, 'var(--blue)');
+      setProgress(done / total * 100);
+      await new Promise(r => setTimeout(r, 0));
+      try {
+        const arr = GENERATORS[type](p.size, p.octaves, seed, p.freqScale);
+        const out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
+        const canvas = arrToExportCanvas(out, p.size, p.colormap);
+        if (zip) {
+          const blob = await canvasToBlob(canvas);
+          zip.file(name, blob);
+        } else {
+          const blob = await canvasToBlob(canvas);
+          downloadBlob(blob, name);
+        }
+      } catch(e) { console.error(e); }
+      done++;
+    }
+  }
+  if (zip) {
+    setStatus('ZIP…', 'var(--blue)');
+    const blob = await zip.generateAsync({ type: 'blob' });
+    downloadBlob(blob, `fxsprite_${p.size}_${Date.now()}.zip`);
+  }
+  setProgress(100);
+  setStatus(`✅ ${total}`, 'var(--green)');
+  isGenerating = false;
+}
+
+// ============================================================
+// URL 分享 / 還原
+// ============================================================
+function shareURL() {
+  const p = getParams();
+  const q = new URLSearchParams({
+    type: p.type, seed: p.seed, oct: p.octaves,
+    zoom: document.getElementById('zoom').value,
+    size: p.size, cmap: p.colormap,
+    gamma: document.getElementById('gamma').value,
+    bright: document.getElementById('bright').value,
+    con: document.getElementById('contrast').value,
+    llo: document.getElementById('lev-lo').value,
+    lhi: document.getElementById('lev-hi').value,
+    inv: p.invert ? 1 : 0,
+  });
+  const url = location.origin + location.pathname + '?' + q.toString();
+  const done = () => setStatus('🔗 copied', 'var(--green)');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopy(url, done));
+  } else {
+    fallbackCopy(url, done);
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'absolute'; ta.style.left = '-9999px';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); }
+  catch(e) { setStatus('⚠ copy failed', 'var(--red)'); }
+  document.body.removeChild(ta);
+}
+
+function applyParamsFromURL() {
+  const q = new URLSearchParams(location.search);
+  if (![...q.keys()].length) return;
+  const type = q.get('type');
+  if (type && GENERATORS[type]) {
+    currentType = type;
+    buildTypeList();
+  }
+  if (q.get('seed'))  document.getElementById('seed').value = parseInt(q.get('seed')) || 42;
+  if (q.get('oct')) {
+    document.getElementById('octaves').value = q.get('oct');
+    document.getElementById('octaves-val').textContent = q.get('oct');
+  }
+  if (q.get('zoom')) {
+    document.getElementById('zoom').value = q.get('zoom');
+    document.getElementById('zoom-val').textContent = (q.get('zoom')/4).toFixed(2)+'×';
+  }
+  if (q.get('size')) {
+    const r = document.querySelector(`input[name=size][value="${q.get('size')}"]`);
+    if (r) r.checked = true;
+  }
+  if (q.get('cmap')) {
+    const r = document.querySelector(`input[name=cmap][value="${q.get('cmap')}"]`);
+    if (r) r.checked = true;
+  }
+  if (q.get('gamma')) {
+    document.getElementById('gamma').value = q.get('gamma');
+    document.getElementById('gamma-val').textContent = (q.get('gamma')/10).toFixed(1)+'×';
+  }
+  if (q.get('bright')) {
+    const v = parseInt(q.get('bright'));
+    document.getElementById('bright').value = v;
+    document.getElementById('bright-val').textContent = v===0?'0.0':(v>0?'+':'')+(v/10).toFixed(1);
+  }
+  if (q.get('con')) {
+    document.getElementById('contrast').value = q.get('con');
+    document.getElementById('contrast-val').textContent = (q.get('con')/100).toFixed(2)+'×';
+  }
+  if (q.get('llo')) {
+    document.getElementById('lev-lo').value = q.get('llo');
+    document.getElementById('lev-lo-val').textContent = (q.get('llo')/100).toFixed(2);
+  }
+  if (q.get('lhi')) {
+    document.getElementById('lev-hi').value = q.get('lhi');
+    document.getElementById('lev-hi-val').textContent = (q.get('lhi')/100).toFixed(2);
+  }
+  if (q.get('inv') === '1') document.getElementById('invert').checked = true;
+}
+
+// ============================================================
+// UI Build
+// ============================================================
+function buildTypeList() {
+  const ul = document.getElementById('type-list');
+  ul.innerHTML = '';
+  TYPE_GROUPS.forEach(group => {
+    const hdr = document.createElement('li');
+    hdr.className = 'type-group-lbl';
+    hdr.textContent = t(GROUP_I18N[group.label]) || group.label;
+    ul.appendChild(hdr);
+    group.keys.forEach(key => {
+      const label = typeLabelDisp(TYPE_MAP[key] || key);
+      const li = document.createElement('li');
+      li.textContent = label; li.dataset.key = key;
+      if (key === currentType) li.classList.add('sel');
+      li.addEventListener('click', () => selectType(key));
+      ul.appendChild(li);
+    });
+  });
+}
+
+function buildCmapRadios() {
+  const cr = document.getElementById('cmap-row');
+  const cur = document.querySelector('input[name=cmap]:checked')?.value || 'gray';
+  cr.innerHTML = '';
+  [['gray','cm_gray'],['gold','cm_gold'],['plasma','cm_plasma'],['fire','cm_fire'],
+   ['ice','cm_ice'],['electric','cm_electric'],['toxic','cm_toxic'],['magma','cm_magma']].forEach(([v, k]) => {
+    const lbl = document.createElement('label');
+    const r = document.createElement('input');
+    r.type='radio'; r.name='cmap'; r.value=v;
+    if (v===cur) r.checked=true;
+    r.addEventListener('change', schedulePreview);
+    lbl.appendChild(r); lbl.append(' ' + t(k));
+    cr.appendChild(lbl);
+  });
+}
+
+function buildUI() {
+  buildTypeList();
+
+  // Size radios
+  const sr = document.getElementById('size-row');
+  ['64','128','256','512','1024'].forEach(s => {
+    const lbl = document.createElement('label');
+    const r = document.createElement('input');
+    r.type='radio'; r.name='size'; r.value=s;
+    if (s==='512') r.checked=true;
+    r.addEventListener('change', schedulePreview);
+    lbl.appendChild(r); lbl.append(' '+s);
+    sr.appendChild(lbl);
+  });
+
+  buildCmapRadios();
+
+  // Tile buttons
+  const tb = document.getElementById('tile-btns');
+  [1,2,4].forEach(n => {
+    const btn = document.createElement('button');
+    btn.className = 'tile-btn' + (n===2?' active':'');
+    btn.textContent = `${n}×${n}`;
+    btn.addEventListener('click', () => {
+      tileCount = n;
+      document.querySelectorAll('.tile-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (lastArr) renderTilePreview();
+    });
+    tb.appendChild(btn);
+  });
+
+  // Slider listeners
+  document.getElementById('octaves').addEventListener('input', e => {
+    document.getElementById('octaves-val').textContent = e.target.value;
+    schedulePreview();
+  });
+  document.getElementById('zoom').addEventListener('input', e => {
+    document.getElementById('zoom-val').textContent = (e.target.value/4).toFixed(2)+'×';
+    schedulePreview();
+  });
+  document.getElementById('gamma').addEventListener('input', e => {
+    document.getElementById('gamma-val').textContent = (e.target.value/10).toFixed(1)+'×';
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('bright').addEventListener('input', e => {
+    const v = parseInt(e.target.value);
+    document.getElementById('bright-val').textContent = v===0?'0.0':(v>0?'+':'')+(v/10).toFixed(1);
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('contrast').addEventListener('input', e => {
+    document.getElementById('contrast-val').textContent = (e.target.value/100).toFixed(2)+'×';
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('lev-lo').addEventListener('input', e => {
+    const lo = parseInt(e.target.value);
+    const hiEl = document.getElementById('lev-hi');
+    if (lo >= parseInt(hiEl.value)) {
+      hiEl.value = Math.min(100, lo + 5);
+      document.getElementById('lev-hi-val').textContent = (hiEl.value/100).toFixed(2);
+    }
+    document.getElementById('lev-lo-val').textContent = (lo/100).toFixed(2);
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('lev-hi').addEventListener('input', e => {
+    const hi = parseInt(e.target.value);
+    const loEl = document.getElementById('lev-lo');
+    if (hi <= parseInt(loEl.value)) {
+      loEl.value = Math.max(0, hi - 5);
+      document.getElementById('lev-lo-val').textContent = (loEl.value/100).toFixed(2);
+    }
+    document.getElementById('lev-hi-val').textContent = (hi/100).toFixed(2);
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('invert').addEventListener('change', () => { if (lastArr) renderTilePreview(); });
+  document.getElementById('seed').addEventListener('input', schedulePreview);
+  document.getElementById('dissolve-t').addEventListener('input', e => {
+    document.getElementById('dissolve-t-val').textContent = e.target.value + '%';
+    renderDissolve();
+  });
+}
+
+function selectType(key) {
+  currentType = key;
+  document.querySelectorAll('#type-list li').forEach(li => li.classList.toggle('sel', li.dataset.key===key));
+  applyPreviewTab();
+  schedulePreview();
+}
+
+function updateResInfo() {
+  const p = getParams();
+  const el = document.getElementById('res-info');
+  if (el) el.textContent = p.type + ' · ' + p.size + 'px · seed ' + p.seed;
+}
+
+// ============================================================
+// Keyboard
+// ============================================================
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space') { e.preventDefault(); schedulePreview(); }
+  if (e.key === 's' || e.key === 'S') saveSingle();
+  if (e.key === 'r' || e.key === 'R') randomSeed();
+});
+
+// ============================================================
+// Canvas size sync + mobile preview tabs
+// ============================================================
+function syncCanvasSizes() {
+  ['preview','tile-canvas','dissolve-canvas'].forEach(id => {
+    const c = document.getElementById(id);
+    const w = c.offsetWidth;
+    if (w > 0 && (c.width !== w || c.height !== w)) {
+      c.width = w;
+      c.height = w;
+    }
+  });
+}
+
+let previewTab = 'live';
+const PREVIEW_TAB_DEFS = [
+  { id: 'live',     label: '即時' },
+  { id: 'tile',     label: '拼貼',  sec: 'tile-section' },
+  { id: 'dissolve', label: '溶解',  sec: 'dissolve-section' },
+];
+
+function buildPreviewTabs() {
+  const bar = document.getElementById('preview-tabs');
+  bar.innerHTML = '';
+  PREVIEW_TAB_DEFS.forEach(d => {
+    const b = document.createElement('button');
+    b.className = 'type-tab' + (previewTab === d.id ? ' active' : '');
+    b.textContent = t(PVTAB_I18N[d.id]) || d.label;
+    b.addEventListener('click', () => { previewTab = d.id; applyPreviewTab(); });
+    bar.appendChild(b);
+  });
+}
+
+function applyPreviewTab() {
+  buildPreviewTabs();
+  const main = document.getElementById('main-panel');
+  const thumbs = document.querySelector('.thumbs');
+  const secs = { tile: 'tile-section', dissolve: 'dissolve-section' };
+  if (window.innerWidth > 640) {
+    main.style.display = '';
+    thumbs.style.display = '';
+    Object.values(secs).forEach(id => document.getElementById(id).style.display = '');
+    return;
+  }
+  if (previewTab === 'live') {
+    main.style.display = '';
+    thumbs.style.display = 'none';
+  } else {
+    main.style.display = 'none';
+    thumbs.style.display = '';
+    Object.values(secs).forEach(id => document.getElementById(id).style.display = 'none');
+    const sec = document.getElementById(secs[previewTab]);
+    sec.style.display = '';
+    sec.classList.remove('collapsed');
+    const ar = sec.querySelector('.fold-arrow');
+    if (ar) ar.textContent = '▾';
+    syncCanvasSizes();
+    if (lastArr) renderTilePreview();
+  }
+}
+
+function initThumbFolds() {
+  document.querySelectorAll('.thumbs .preview-col').forEach(col => {
+    const hdr = col.querySelector('.panel-header');
+    hdr.addEventListener('click', e => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+      if (window.innerWidth <= 640) return;
+      const collapsed = col.classList.toggle('collapsed');
+      const ar = hdr.querySelector('.fold-arrow');
+      if (ar) ar.textContent = collapsed ? '▸' : '▾';
+      if (!collapsed) {
+        syncCanvasSizes();
+        if (lastArr) renderTilePreview();
+      }
+    });
+  });
+}
+
+let _resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => { applyPreviewTab(); syncCanvasSizes(); schedulePreview(); }, 120);
+});
+
+// Init
+// ============================================================
+buildUI();
+applyI18n();
+applyParamsFromURL();
+initThumbFolds();
+applyPreviewTab();
+syncCanvasSizes();
+updateResInfo();
+schedulePreview();
+</script>
+</body>
+</html>
