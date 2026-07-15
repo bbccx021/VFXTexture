@@ -189,6 +189,16 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
           <input type="range" id="gamma" min="2" max="30" value="10">
           <span class="sl-val" id="gamma-val">1.0×</span>
         </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_glow">發光</span>
+          <input type="range" id="glow-str" min="0" max="150" value="0">
+          <span class="sl-val" id="glow-str-val">0%</span>
+        </div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_glowrad">光暈半徑</span>
+          <input type="range" id="glow-rad" min="2" max="24" value="8">
+          <span class="sl-val" id="glow-rad-val">8</span>
+        </div>
         <details class="sub">
           <summary data-i18n="adv_levels">進階（黑點 / 白點 / 亮度）</summary>
           <div class="sl-row">
@@ -309,6 +319,7 @@ const I18N = {
   adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
   lbl_detail:['細節層','Octaves'], lbl_zoom:['縮放','Scale'], lbl_contrast:['對比','Contrast'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
+  lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'],
   chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
   btn_rand:['🎲 隨機','🎲 Random'], btn_auto:['⚡ 自動色階','⚡ Auto Levels'], btn_reset:['重設','Reset'],
   btn_save:['↓ 下載 PNG','↓ Save PNG'], btn_batch:['⊞ 批次 ZIP','⊞ Batch ZIP'], btn_share:['🔗 分享連結','🔗 Share Link'],
@@ -1248,6 +1259,8 @@ function getParams() {
     celOutline:parseInt(document.getElementById('cel-outline').value) / 100,
     celSilh:   parseInt(document.getElementById('cel-silh').value),
     celRough:  parseInt(document.getElementById('cel-rough').value) / 100,
+    glowStr:   parseInt(document.getElementById('glow-str').value) / 100,
+    glowRad:   parseInt(document.getElementById('glow-rad').value),
   };
 }
 
@@ -1369,11 +1382,49 @@ function celActive(p) {
   return p.celLevels > 1 || p.celOutline > 0 || p.celSilh > 0 || p.celRough > 0;
 }
 
-// tone 後處理 + 賽璐璐，供預覽 / 下載 / 批次共用
+// ============================================================
+// Glow（bloom）— 可分離 box blur ×3 ≈ 高斯，加回原圖模擬引擎發光
+// ============================================================
+function boxBlurH(src, dst, size, r) {
+  const iw = 1 / (2 * r + 1);
+  for (let y = 0; y < size; y++) {
+    const o = y * size;
+    let acc = src[o] * (r + 1);
+    for (let x = 1; x <= r; x++) acc += src[o + Math.min(x, size - 1)];
+    for (let x = 0; x < size; x++) {
+      dst[o + x] = acc * iw;
+      acc += src[o + Math.min(x + r + 1, size - 1)] - src[o + Math.max(x - r, 0)];
+    }
+  }
+}
+function boxBlurV(src, dst, size, r) {
+  const iw = 1 / (2 * r + 1);
+  for (let x = 0; x < size; x++) {
+    let acc = src[x] * (r + 1);
+    for (let y = 1; y <= r; y++) acc += src[Math.min(y, size - 1) * size + x];
+    for (let y = 0; y < size; y++) {
+      dst[y * size + x] = acc * iw;
+      acc += src[Math.min(y + r + 1, size - 1) * size + x] - src[Math.max(y - r, 0) * size + x];
+    }
+  }
+}
+function applyGlow(field, size, strength, radiusPx) {
+  const r = Math.max(1, Math.round(radiusPx));
+  let a = field.slice(), b = new Float32Array(field.length);
+  for (let p = 0; p < 3; p++) { boxBlurH(a, b, size, r); boxBlurV(b, a, size, r); }
+  const out = new Float32Array(field.length);
+  for (let i = 0; i < field.length; i++) out[i] = Math.min(1, field[i] + a[i] * strength);
+  return out;
+}
+
+// tone 後處理 + 賽璐璐 + 發光，供預覽 / 下載 / 批次共用
 function finalizeField(arr, size, p) {
   let out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
   if (celActive(p)) {
     out = celShade(out, size, p.celLevels, p.celOutline, p.celSilh, p.celRough, p.seed);
+  }
+  if (p.glowStr > 0) {
+    out = applyGlow(out, size, p.glowStr, p.glowRad * size / 256);   // 半徑隨解析度縮放
   }
   return out;
 }
@@ -1428,11 +1479,15 @@ function resetPost() {
   document.getElementById('contrast').value = 100;
   document.getElementById('gamma').value = 10;
   document.getElementById('bright').value = 0;
+  document.getElementById('glow-str').value = 0;
+  document.getElementById('glow-rad').value = 8;
   document.getElementById('lev-lo-val').textContent = '0.00';
   document.getElementById('lev-hi-val').textContent = '1.00';
   document.getElementById('contrast-val').textContent = '1.00×';
   document.getElementById('gamma-val').textContent = '1.0×';
   document.getElementById('bright-val').textContent = '0.0';
+  document.getElementById('glow-str-val').textContent = '0%';
+  document.getElementById('glow-rad-val').textContent = '8';
   setStatus(t('st_ready'), 'var(--dim)');
   if (lastArr) renderTilePreview();
 }
@@ -1753,6 +1808,8 @@ function shareURL() {
     co: document.getElementById('cel-outline').value,
     cs: document.getElementById('cel-silh').value,
     cr: document.getElementById('cel-rough').value,
+    gs: document.getElementById('glow-str').value,
+    gr: document.getElementById('glow-rad').value,
   });
   const url = location.origin + location.pathname + '?' + q.toString();
   const done = () => setStatus('🔗 copied', 'var(--green)');
@@ -1820,6 +1877,14 @@ function applyParamsFromURL() {
   if (q.get('inv') === '1') document.getElementById('invert').checked = true;
   if (q.get('cl') || q.get('co') || q.get('cs') || q.get('cr')) {
     setCel(parseInt(q.get('cl')) || 1, parseInt(q.get('co')) || 0, parseInt(q.get('cs')) || 0, parseInt(q.get('cr')) || 0);
+  }
+  if (q.get('gs')) {
+    document.getElementById('glow-str').value = parseInt(q.get('gs')) || 0;
+    document.getElementById('glow-str-val').textContent = (parseInt(q.get('gs')) || 0) + '%';
+  }
+  if (q.get('gr')) {
+    document.getElementById('glow-rad').value = parseInt(q.get('gr')) || 8;
+    document.getElementById('glow-rad-val').textContent = parseInt(q.get('gr')) || 8;
   }
 }
 
@@ -1937,6 +2002,14 @@ function buildUI() {
   });
   document.getElementById('cel-rough').addEventListener('input', e => {
     document.getElementById('cel-rough-val').textContent = e.target.value + '%';
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('glow-str').addEventListener('input', e => {
+    document.getElementById('glow-str-val').textContent = e.target.value + '%';
+    if (lastArr) renderTilePreview();
+  });
+  document.getElementById('glow-rad').addEventListener('input', e => {
+    document.getElementById('glow-rad-val').textContent = e.target.value;
     if (lastArr) renderTilePreview();
   });
   document.querySelectorAll('input[name=fxstyle]').forEach(r =>

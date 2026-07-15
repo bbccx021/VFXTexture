@@ -28,7 +28,7 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 - 10 種色彩映射：灰階 / **卡通雙色** / **卡通三色** / 金 / Plasma / 火焰 / 冰 / 電 / 毒 / 熔岩 gradient + cel mapping
 - 背景切換：黑 / 白 / 透明（透明輸出帶 alpha 通道，可直接放進引擎）background: black / white / alpha
-- 後處理鏈：色階、對比、Gamma、亮度、反轉 + 亮度直方圖 + 一鍵自動色階
+- 後處理鏈：色階、對比、Gamma、亮度、反轉、**Glow 發光（bloom，強度 + 半徑，預覽引擎發亮效果）** + 亮度直方圖 + 一鍵自動色階
 - 卡通風格選擇：**賽璐璐 / 手繪 / 向量 / 風格化** 一鍵預設（色塊階數、墨線描邊、外框線、邊緣抖動四參數可再微調）；cel 開啟時自動 2× 超取樣消除邊緣鋸齒 toon styles + SSAA
 - 溶解預覽
 - 批次 ZIP 下載、URL 參數分享
