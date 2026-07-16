@@ -1180,6 +1180,81 @@ function generateCellCrack(size, octaves, seed, freqScale) {
   return out;
 }
 
+// 風格化衝擊：Substance Designer 思路
+//   三角碎片(Polygon+Transform)減去圓弧(Shape+Subtract)→ 凹邊風格化尖片；
+//   Splatter Circular 環狀隨機分布(數量/旋轉/縮放/半徑隨機)；
+//   Cells 1 + Histogram Scan → 圓形範圍內 Subtract 切碎、消除重複；Warp(Perlin) 扭波浪邊。
+//   建議搭 Glow 後處理出 bloom
+function generateStylizedImpact(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 2654435761 + 41) >>> 0 || 1); rng.next();
+  const k = Math.max(0.05, Math.min(1.4, freqScale));
+  const cx = 0.5, cy = 0.5;
+  const n = 4 + Math.round(octaves / 2.5);            // Pattern Amount（碎片數）
+  const shards = [];
+  const a0 = rng.rand() * Math.PI * 2;
+  for (let i = 0; i < n; i++) {
+    const a = a0 + i / n * Math.PI * 2 + (rng.rand() - 0.5) * 0.5;   // 隨機旋轉
+    const rad = (0.14 + (rng.rand() - 0.5) * 0.06) * k;              // Radius Random
+    const s = (0.85 + rng.rand() * 0.6) * k;                          // Scale Random
+    const axa = a + (rng.rand() - 0.5) * 0.4;                         // 碎片軸向（略偏離徑向）
+    shards.push({
+      ca: Math.cos(axa), sa: Math.sin(axa),
+      x: cx + Math.cos(a) * rad, y: cy + Math.sin(a) * rad,
+      L: (0.19 + rng.rand() * 0.10) * s, B: (0.05 + rng.rand() * 0.03) * s,
+      W: (0.055 + rng.rand() * 0.03) * s,
+      cutR: (0.07 + rng.rand() * 0.05) * s, cutD: (0.11 + rng.rand() * 0.05) * s,
+    });
+  }
+  const cn = 5 + Math.round(octaves / 2);            // Cells 1
+  const cp = [];
+  for (let a = 0; a < cn; a++) for (let b = 0; b < cn; b++) cp.push({ x: (b + rng.rand()) / cn, y: (a + rng.rand()) / cn });
+  const wx = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51) >>> 0, 1);        // Warp Perlin
+  const wy = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x52) >>> 0, 1);
+  const aa = 0.006;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      const px = i / size + (wx[idx] - 0.5) * 0.035;
+      const py = j / size + (wy[idx] - 0.5) * 0.035;
+      let cov = 0;
+      for (const s of shards) {
+        const dx = px - s.x, dy = py - s.y;
+        const ly = dx * s.ca + dy * s.sa;             // 沿碎片軸（尖端向外）
+        const lx = -dx * s.sa + dy * s.ca;            // 切向
+        if (ly > s.L || ly < -s.B) continue;
+        const t = (ly + s.B) / (s.L + s.B);
+        const halfW = s.W * (1 - t);                  // 三角：底寬 → 尖端收窄
+        const cdx = lx, cdy = ly + s.cutD;
+        const circM = Math.sqrt(cdx * cdx + cdy * cdy) - s.cutR;   // 減去圓弧 → 凹底
+        const m = Math.min(s.L - ly, ly + s.B, halfW - Math.abs(lx), circM);
+        if (m <= -aa) continue;
+        const c = sstep(-aa, aa, m);                  // 邊緣抗鋸齒
+        if (c > cov) cov = c;
+      }
+      if (cov > 0.001) {
+        // Cells 切碎：F2−F1 大（細胞內部）+ 圓形範圍(Multiply) → Subtract
+        const cgx = Math.floor(px * cn), cgy = Math.floor(py * cn);
+        let f1 = 9, f2 = 9;
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+          const gx = cgx + ox, gy = cgy + oy;
+          if (gx < 0 || gy < 0 || gx >= cn || gy >= cn) continue;
+          const p = cp[gy * cn + gx];
+          const ex = (px - p.x) * cn, ey = (py - p.y) * cn;
+          const d = Math.sqrt(ex * ex + ey * ey);
+          if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
+        }
+        const cellEdge = f2 > 8 ? 0 : f2 - f1;
+        const r = Math.hypot(px - 0.5, py - 0.5);
+        const ringMask = sstep(0.04 * k, 0.13 * k, r) * (1 - sstep(0.30 * k, 0.42 * k, r));
+        cov *= 1 - sstep(0.34, 0.52, cellEdge) * ringMask;
+      }
+      out[idx] = cov;
+    }
+  }
+  return out;
+}
+
 // 飛濺：不規則主 blob（角度諧波 + fbm 咬邊）+ 徑向拉長的衛星液滴（血/毒/黏液通用）
 function generateSplatter(size, octaves, seed, freqScale) {
   const rng = new RNG((seed * 52711 + 29) >>> 0 || 1); rng.next();
@@ -1275,6 +1350,7 @@ const GENERATORS = {
   sparks:     generateSparks,
   groundcrack:generateGroundCrack,
   cellcrack:  generateCellCrack,
+  stylizedimpact: generateStylizedImpact,
   splatter:   generateSplatter,
   inkring:    generateInkRing,
 };
@@ -1296,6 +1372,7 @@ const TYPE_LABELS = [
   ['sparks',     '✨ Sparks      星形火花'],
   ['groundcrack','🕸 GroundCrack 地裂裂紋'],
   ['cellcrack',  '🕳 CellCrack   細胞地裂'],
+  ['stylizedimpact','✸ StylizedImpact 風格化衝擊'],
   ['splatter',   '🩸 Splatter    飛濺液滴'],
   ['inkring',    '⭕ InkRing     手繪墨圈'],
 ];
@@ -1303,7 +1380,7 @@ const TYPE_MAP = Object.fromEntries(TYPE_LABELS);
 
 const TYPE_GROUPS = [
   { label: '打擊 Strike', keys: ['slash','bolt','crossslash','glint'] },
-  { label: '爆發 Burst',  keys: ['shockwave','muzzleflash','sparks','groundcrack','cellcrack'] },
+  { label: '爆發 Burst',  keys: ['shockwave','muzzleflash','sparks','groundcrack','cellcrack','stylizedimpact'] },
   { label: '光暈 Glow',   keys: ['glow','starglow','ringglow','anamorph'] },
   { label: '煙霧 Smoke',  keys: ['celsmoke'] },
   { label: '石頭 Rock',   keys: ['rock'] },

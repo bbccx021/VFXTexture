@@ -16,7 +16,7 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 **火焰 Fire** — Flame 程序化火焰（寬圓潤多瓣身體 + 雙尖火舌、自帶尖端的內焰亮部；缺口數量／大小滑桿 + 🎲 一鍵換位）
 
-**爆發 Burst** — Shockwave 衝擊波環、MuzzleFlash 槍口火光、Sparks 星形火花、GroundCrack 地裂裂紋、CellCrack 細胞地裂（Substance Designer 思路：Voronoi 細胞邊界 + Perlin Warp 破邊 + 寬度調變 + 隨機扣除斷裂 + 放射衝擊整合）
+**爆發 Burst** — Shockwave 衝擊波環、MuzzleFlash 槍口火光、Sparks 星形火花、GroundCrack 地裂裂紋、CellCrack 細胞地裂（Voronoi 邊界 + Perlin Warp）、StylizedImpact 風格化衝擊（SD 思路：三角碎片減圓弧 + Splatter 環狀 + Cells 切碎 + Warp 波浪邊，搭 Glow 出 bloom）
 
 **液體 Liquid** — Splatter 飛濺液滴（血 / 毒 / 黏液通用，配 ramp 換色）
 
