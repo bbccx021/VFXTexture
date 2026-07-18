@@ -18,13 +18,17 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 **爆發 Burst** — Shockwave 衝擊波環、MuzzleFlash 槍口火光、Sparks 星形火花、GroundCrack 地裂裂紋、CellCrack 細胞地裂（Voronoi 邊界 + Perlin Warp）、StylizedImpact 風格化衝擊（SD 思路：三角碎片減圓弧 + Splatter 環狀 + Cells 切碎 + Warp 波浪邊，搭 Glow 出 bloom）
 
-**液體 Liquid** — Splatter 飛濺液滴（血 / 毒 / 黏液通用，配 ramp 換色）
+**光暈 Glow（新增）** — Beam 能量光束、Rays 放射光芒（聖光 / nova）
 
-**魔法 Magic** — InkRing 手繪墨圈（debuff 圈 / 印記）
+**液體 Liquid** — Splatter 飛濺液滴、Bubble 泡泡（薄殼＋高光）、Ripple 水面漣漪、Caustics 水下焦散（雙尺度 Voronoi 光網）
+
+**魔法 Magic** — InkRing 手繪墨圈、Vortex 漩渦、Snowflake 雪花冰晶（六重對稱＋側枝）、ArcRing 電弧環（環狀閃電＋外放弧枝）、Orb 能量球（fresnel 亮邊＋內旋紋）
+
+**拖尾 Trail** — TrailRamp 拖尾漸層（亮頭淡尾，配 2:1／4:1 比例＋左錨）
 
 ## 功能 / Features
 
-- **🧱 組合堆疊（差異性核心）**：基底特效之後可疊任意層 —— 19 種特效層（加法／乘法／減去／最大／最小／濾色混合 + 不透明度／縮放／獨立 seed）與 Warp 扭曲／模糊／色階／反轉運算層，可排序、可刪除；附一鍵範例組合（能量煙、碎裂衝擊、魔法印記、侵蝕斬擊）；堆疊進分享連結，全程 Worker 運算 composite stack (linear node chain)
+- **🧱 組合堆疊（差異性核心）**：基底特效之後可疊任意層 —— 29 種特效層（加法／乘法／減去／最大／最小／濾色混合 + 不透明度／縮放／獨立 seed）與 9 種運算節點（Warp 扭曲／模糊／銳化／色階／Threshold 二值化／反轉／鏡像／放射遮罩／旋轉），可排序、可刪除；**19 組一鍵範例**（能量煙、雷光斬、冰霜法陣、雷電護盾、聖光爆發、焦散水池、靈魂寶珠…）；堆疊進分享連結，全程 Worker 運算 composite stack (linear node chain)
 - **每型專屬參數面板**：每種特效宣告自己的參數（名稱／範圍對齊實際行為，滑桿無死區），選特效自動切換 per-type param schema
 - **動畫 / 序列幀**：時間 t 演化（煙消散、衝擊波擴張、碎片炸開、火焰搖曳…），t 滑桿即時預覽單幀，一鍵匯出 **flipbook Sheet**（單張網格）或各幀 ZIP
 - **Web Worker 渲染**：生成運算在背景執行緒，拖滑桿與批次匯出 UI 不凍結（不支援環境自動 fallback）

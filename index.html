@@ -390,13 +390,13 @@ const I18N = {
   pv_dissolve:['溶解','Dissolve'],
   tab_live:['即時','Live'], tab_dissolve:['溶解','Dissolve'],
   g_strike:['打擊 Strike','Strike'], g_glow:['光暈 Glow','Glow'], g_smoke:['煙霧 Smoke','Smoke'], g_rock:['石頭 Rock','Rock'], g_fire:['火焰 Fire','Fire'],
-  g_burst:['爆發 Burst','Burst'], g_liquid:['液體 Liquid','Liquid'], g_magic:['魔法 Magic','Magic'],
+  g_burst:['爆發 Burst','Burst'], g_liquid:['液體 Liquid','Liquid'], g_magic:['魔法 Magic','Magic'], g_trail:['拖尾 Trail','Trail'],
   st_ready:['就緒','Ready'], live_live:['⬤ 即時預覽','⬤ Live'],
   hotkeys:['Space 重新生成  ·  S 下載  ·  R 隨機種子','Space regen  ·  S save  ·  R reseed'],
 };
 function t(k){ const e = I18N[k]; return e ? e[LANG === 'en' ? 1 : 0] : k; }
 function typeLabelDisp(raw){ return LANG === 'en' ? raw.replace(/\s*[一-鿿].*$/, '') : raw; }
-const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow','煙霧 Smoke':'g_smoke','石頭 Rock':'g_rock','火焰 Fire':'g_fire','爆發 Burst':'g_burst','液體 Liquid':'g_liquid','魔法 Magic':'g_magic'};
+const GROUP_I18N = {'打擊 Strike':'g_strike','光暈 Glow':'g_glow','煙霧 Smoke':'g_smoke','石頭 Rock':'g_rock','火焰 Fire':'g_fire','爆發 Burst':'g_burst','液體 Liquid':'g_liquid','魔法 Magic':'g_magic','拖尾 Trail':'g_trail'};
 const PVTAB_I18N = {live:'tab_live',dissolve:'tab_dissolve'};
 
 function applyI18n() {
@@ -883,6 +883,59 @@ function evalStack(size, p) {
       const inv = new Float32Array(field.length);
       for (let i = 0; i < field.length; i++) inv[i] = 1 - Math.min(1, Math.max(0, field[i]));
       field = inv;
+    } else if (L.op === 'thresh') {
+      // Histogram Scan：位置 + 柔邊 → 硬化邊緣
+      const c = (L.pos == null ? 50 : L.pos) / 100, s = Math.max(0.005, (L.soft == null ? 10 : L.soft) / 100);
+      const o = new Float32Array(field.length);
+      for (let i = 0; i < field.length; i++) o[i] = sstep(c - s, c + s, field[i]);
+      field = o;
+    } else if (L.op === 'sharpen') {
+      // Unsharp mask：field + (field − blur)×amt
+      const bl = blurOp(field, size, L.rad || 3);
+      const amt = (L.amt == null ? 50 : L.amt) / 50;
+      const o = new Float32Array(field.length);
+      for (let i = 0; i < field.length; i++) o[i] = Math.max(0, field[i] + (field[i] - bl[i]) * amt);
+      field = o;
+    } else if (L.op === 'mirror') {
+      const o = new Float32Array(field.length);
+      const half = size / 2;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const sx = L.axis === 'y' ? x : (x < half ? x : size - 1 - x);
+          const sy = L.axis === 'y' ? (y < half ? y : size - 1 - y) : y;
+          o[y * size + x] = field[sy * size + sx];
+        }
+      }
+      field = o;
+    } else if (L.op === 'radmask') {
+      // 放射遮罩：內徑全亮 → 外徑淡出（把效果限制在圓形範圍）
+      const rIn = (L.inner == null ? 30 : L.inner) / 100 * 0.5;
+      const rOut = Math.max(rIn + 0.01, (L.outer == null ? 70 : L.outer) / 100 * 0.5);
+      const o = new Float32Array(field.length);
+      for (let y = 0; y < size; y++) {
+        const dy = y / size - 0.5;
+        for (let x = 0; x < size; x++) {
+          const dx = x / size - 0.5;
+          o[y * size + x] = field[y * size + x] * (1 - sstep(rIn, rOut, Math.hypot(dx, dy)));
+        }
+      }
+      field = o;
+    } else if (L.op === 'rotate') {
+      const ang = (L.ang || 0) * Math.PI / 180;
+      const ca = Math.cos(-ang), sa = Math.sin(-ang), h = (size - 1) / 2;
+      const o = new Float32Array(field.length);
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const rx = x - h, ry = y - h;
+          const sx = rx * ca - ry * sa + h, sy = rx * sa + ry * ca + h;
+          if (sx < 0 || sy < 0 || sx > size - 1.001 || sy > size - 1.001) continue;
+          const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0;
+          const r0 = y0 * size + x0;
+          o[y * size + x] = field[r0] * (1 - fx) * (1 - fy) + field[r0 + 1] * fx * (1 - fy)
+                          + field[r0 + size] * (1 - fx) * fy + field[r0 + size + 1] * fx * fy;
+        }
+      }
+      field = o;
     }
   }
   return field;
@@ -1452,6 +1505,319 @@ function generateInkRing(size, octaves, seed, freqScale) {
   return out;
 }
 
+// 光束：核心亮線 + 外暈 + fbm 能量紋理，端點軟收（直式；配 rotate op 可轉橫）
+function generateBeam(size, octaves, seed, freqScale) {
+  const k = Math.max(0.1, Math.min(2, freqScale));
+  const w1 = 0.014 * k, w2 = 0.085 * k;
+  const tex = fbm(size, Math.min(10, octaves), 3, 2, 0.55, (seed ^ 0x77aa) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const y = j / size;
+    const endFade = sstep(0, 0.08, y) * (1 - sstep(0.92, 1, y));
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const idx = j * size + i;
+      const m = 0.72 + tex[idx] * 0.55;
+      const v = (Math.exp(-(dx * dx) / (w1 * w1)) + Math.exp(-(dx * dx) / (w2 * w2)) * 0.45) * endFade * m;
+      out[idx] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 泡泡：薄殼圓 + 左上高光點 + 右下反光弧（水/黏液通用）
+function generateBubble(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 48271 + 31) >>> 0 || 1); rng.next();
+  const k = Math.max(0.1, Math.min(1.6, freqScale));
+  const cx = 0.5 + (rng.rand() - 0.5) * 0.03, cy = 0.5 + (rng.rand() - 0.5) * 0.03;
+  const R = 0.30 * k, w = (0.008 + octaves * 0.0009) * Math.max(0.4, k);
+  const hx = cx - R * 0.42, hy = cy - R * 0.42, hs = 0.0018 * k * k;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - cy;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - cx;
+      const r = Math.hypot(dx, dy);
+      const d = r - R;
+      let v = Math.exp(-(d * d) / (w * w)) * 0.8;            // 薄殼
+      if (r < R) v += 0.06 + 0.10 * Math.pow(r / R, 3);       // 內部微光
+      const hdx = i / size - hx, hdy = j / size - hy;
+      v += Math.exp(-(hdx * hdx + hdy * hdy) / hs) * 0.95;    // 高光點
+      const a = Math.atan2(dy, dx);
+      const arc = Math.exp(-((r - R * 0.78) * (r - R * 0.78)) / (w * w * 4)) *
+                  Math.exp(-Math.pow(a - 0.8, 2) / 0.35) * 0.35;  // 右下反光弧
+      out[j * size + i] = Math.min(1, v + arc);
+    }
+  }
+  return out;
+}
+
+// 漣漪：同心圓環往外衰減 + 角度諧波抖動（水面擴散）
+function generateRipple(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 16807 + 51) >>> 0 || 1); rng.next();
+  const k = Math.max(0.1, Math.min(1.6, freqScale));
+  const nR = 3 + Math.floor(octaves / 3);
+  const sp = 0.105 * k, w = 0.016 * k, r0 = 0.05 * k;
+  const p1 = rng.rand() * Math.PI * 2, p2 = rng.rand() * Math.PI * 2;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+      const wob = 1 + 0.03 * Math.cos(3 * a + p1) + 0.02 * Math.cos(5 * a + p2);
+      const rw = r * wob;
+      let v = 0;
+      for (let n = 0; n < nR; n++) {
+        const rn = r0 + n * sp;
+        v += Math.exp(-((rw - rn) * (rw - rn)) / (w * w)) * (1 - n / nR * 0.72);
+      }
+      v *= 1 - sstep(0.40 * k, 0.50 * k, r);
+      out[j * size + i] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 漩渦：螺旋臂 + 徑向衰減 + fbm 流紋（氣旋/魔法漩渦）
+function generateVortex(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 69621 + 71) >>> 0 || 1); rng.next();
+  const k = Math.max(0.1, Math.min(1.6, freqScale));
+  const arms = 2 + Math.floor(octaves / 3);
+  const twist = 8.5, rot = rng.rand() * Math.PI * 2;
+  const tex = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x3c5a) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const idx = j * size + i;
+      const r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+      const phase = a * arms + (r / k) * twist + rot;
+      const arm = Math.pow((Math.cos(phase) + 1) / 2, 3);
+      let v = arm * sstep(0.015, 0.06, r) * (1 - sstep(0.32 * k, 0.45 * k, r))
+              * (0.45 + 0.65 * (1 - r / (0.45 * k)));
+      v *= 0.7 + tex[idx] * 0.5;
+      v += Math.exp(-(r * r) / (0.0018 * k * k)) * 0.9;
+      out[idx] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 雪花：六重對稱摺疊空間 + 主枝/側枝線段（冰晶）
+function generateSnowflake(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 30269 + 91) >>> 0 || 1); rng.next();
+  const k = Math.max(0.1, Math.min(1.6, freqScale));
+  const L = 0.36 * k, rot = rng.rand() * Math.PI;
+  const nB = 2 + Math.round(octaves / 4);
+  const branches = [];
+  for (let b = 0; b < nB; b++) {
+    const bi = L * (0.28 + 0.55 * b / nB + rng.rand() * 0.08);
+    const bl = L * (0.30 - 0.18 * b / nB) * (0.8 + rng.rand() * 0.4);
+    const ba = 0.95;                                          // 側枝夾角 ~55°
+    branches.push({ x0: bi, y0: 0, x1: bi + Math.cos(ba) * bl, y1: Math.sin(ba) * bl,
+      w: 0.008 * k * (1 - b / nB * 0.4) });
+  }
+  const sect = Math.PI / 3;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r = Math.hypot(dx, dy);
+      if (r > L * 1.15) { out[j * size + i] = 0; continue; }
+      let a = Math.atan2(dy, dx) - rot;
+      a = ((a % sect) + sect) % sect;                         // 摺到 60° 扇區
+      if (a > sect / 2) a = sect - a;                         // 鏡射 → 30° 楔形
+      const px = r * Math.cos(a), py = r * Math.sin(a);
+      const wMain = 0.010 * k * (1 - r / L * 0.6) + 0.0015;
+      let d = segDist(px, py, 0.015, 0, L, 0);
+      let v = Math.exp(-(d * d) / (wMain * wMain));
+      for (const B of branches) {
+        d = segDist(px, py, B.x0, B.y0, B.x1, B.y1);
+        v = Math.max(v, Math.exp(-(d * d) / (B.w * B.w)) * 0.85);
+      }
+      v += Math.exp(-(r * r) / (0.0009 * k * k)) * 0.5;      // 中心
+      out[j * size + i] = Math.min(1, v * 0.95);
+    }
+  }
+  return out;
+}
+
+// 拖尾漸層：亮頭 → 淡尾軟拖尾條（trail UV 專用；配 2:1/4:1 比例 + 左錨最佳）
+function generateTrailRamp(size, octaves, seed, freqScale) {
+  const k = Math.max(0.1, Math.min(2, freqScale));
+  const h0 = 0.11 * k;
+  const tex = fbm(size, Math.min(10, octaves), 4, 2, 0.5, (seed ^ 0x66cd) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const x = i / size;
+      const idx = j * size + i;
+      const hEff = h0 * (1 - x * 0.55);                       // 頭粗尾細
+      const prof = Math.exp(-(dy * dy) / (hEff * hEff));
+      const head = sstep(0, 0.05, x) * Math.pow(1 - x, 1.2);  // 亮頭淡尾
+      const v = prof * head * (0.72 + tex[idx] * 0.45);
+      out[idx] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 水下焦散：雙尺度 Voronoi 稜線網（F2−F1→0 處亮）+ fbm 域扭曲（水面光網）
+function generateCaustics(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 20261 + 101) >>> 0 || 1); rng.next();
+  const k = Math.max(0.2, Math.min(2, freqScale));
+  const n1 = Math.max(3, Math.round((4 + octaves / 2) * k));
+  const n2 = Math.max(4, Math.round(n1 * 1.7));
+  const p1 = makeCellPts(rng, n1, 1), p2 = makeCellPts(rng, n2, 1);
+  const wx = fbm(size, 4, 3, 2, 0.5, (seed ^ 0xaa1) >>> 0, 1);
+  const wy = fbm(size, 4, 3, 2, 0.5, (seed ^ 0xbb2) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    for (let i = 0; i < size; i++) {
+      const idx = j * size + i;
+      let qx = i / size + (wx[idx] - 0.5) * 0.09;
+      let qy = j / size + (wy[idx] - 0.5) * 0.09;
+      qx = qx < 0 ? 0 : qx > 0.999 ? 0.999 : qx;
+      qy = qy < 0 ? 0 : qy > 0.999 ? 0.999 : qy;
+      const A = cellsF1F2(p1, n1, qx, qy), B = cellsF1F2(p2, n2, qx, qy);
+      const e1 = Math.min(1, (A.f2 - A.f1) * 1.3), e2 = Math.min(1, (B.f2 - B.f1) * 1.3);
+      const v = Math.pow(1 - e1, 5) * 0.85 + Math.pow(1 - e2, 6) * 0.45;
+      out[idx] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 電弧環：沿圓周的鋸齒閃電圈（護盾/雷電法陣）+ 外放小弧枝
+function generateArcRing(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 48947 + 113) >>> 0 || 1); rng.next();
+  const k = Math.max(0.2, Math.min(1.4, freqScale));
+  const R = 0.33 * k;
+  const nV = 72;
+  const jagAmp = 0.015 + octaves * 0.0035;                   // octaves 控制鋸齒
+  // 隨機遊走 + 鄰域平滑 → 圓周徑向抖動
+  let walk = new Float32Array(nV);
+  for (let i = 1; i < nV; i++) walk[i] = walk[i - 1] * 0.86 + (rng.rand() - 0.5) * 2;
+  const sm = new Float32Array(nV);
+  for (let i = 0; i < nV; i++) sm[i] = (walk[(i - 1 + nV) % nV] + walk[i] + walk[(i + 1) % nV]) / 3;
+  const segs = [];
+  const rot = rng.rand() * Math.PI * 2;
+  const vx = [], vy = [];
+  for (let i = 0; i < nV; i++) {
+    const a = rot + i / nV * Math.PI * 2;
+    const r = R * (1 + sm[i] * jagAmp);
+    vx.push(0.5 + Math.cos(a) * r); vy.push(0.5 + Math.sin(a) * r);
+  }
+  for (let i = 0; i < nV; i++)
+    segs.push({ ax: vx[i], ay: vy[i], bx: vx[(i + 1) % nV], by: vy[(i + 1) % nV], w: 0.004 * k, b: 0.9 + rng.rand() * 0.1 });
+  // 外放弧枝
+  const nBr = 3 + Math.floor(rng.rand() * 3);
+  for (let b = 0; b < nBr; b++) {
+    const i0 = Math.floor(rng.rand() * nV);
+    const a = rot + i0 / nV * Math.PI * 2 + (rng.rand() - 0.5) * 0.3;
+    let px = vx[i0], py = vy[i0], pr = 0.0028 * k;
+    let ang = a + (rng.rand() - 0.5) * 0.6;
+    for (let t = 0; t < 4; t++) {
+      const len = (0.03 + rng.rand() * 0.04) * k;
+      const ex = px + Math.cos(ang) * len, ey = py + Math.sin(ang) * len;
+      segs.push({ ax: px, ay: py, bx: ex, by: ey, w: pr, b: 0.55 - t * 0.1 });
+      px = ex; py = ey; ang += (rng.rand() - 0.5) * 0.9; pr *= 0.75;
+    }
+  }
+  const margin = 0.03 * k;
+  const rowSegs = Array.from({ length: size }, () => []);
+  for (let si = 0; si < segs.length; si++) {
+    const sg = segs[si];
+    const y0 = Math.max(0, Math.floor((Math.min(sg.ay, sg.by) - margin) * size));
+    const y1 = Math.min(size - 1, Math.ceil((Math.max(sg.ay, sg.by) + margin) * size));
+    for (let j = y0; j <= y1; j++) rowSegs[j].push(si);
+  }
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const py = j / size, list = rowSegs[j];
+    for (let i = 0; i < size; i++) {
+      const px = i / size;
+      let v = 0;
+      for (let s = 0; s < list.length; s++) {
+        const sg = segs[list[s]];
+        const d = segDist(px, py, sg.ax, sg.ay, sg.bx, sg.by);
+        if (d > sg.w * 20) continue;
+        const q = d / sg.w;
+        v += sg.b * (Math.exp(-q * q) + Math.exp(-q * q / 16) * 0.22);
+      }
+      out[j * size + i] = Math.min(1, v);
+    }
+  }
+  return out;
+}
+
+// 能量球：軟核心 + fresnel 亮邊 + 內部旋紋（靈魂/法力寶珠）
+function generateOrb(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 62089 + 131) >>> 0 || 1); rng.next();
+  const k = Math.max(0.2, Math.min(1.6, freqScale));
+  const R = 0.30 * k;
+  const arms = 2 + Math.floor(octaves / 4);
+  const rot = rng.rand() * Math.PI * 2, twist = 5.5;
+  const tex = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9d2c) >>> 0, 1);
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const idx = j * size + i;
+      const r = Math.hypot(dx, dy);
+      if (r > R * 1.35) { out[idx] = 0; continue; }
+      const a = Math.atan2(dy, dx);
+      const core = Math.exp(-(r * r) / (R * R * 0.14));
+      const rim = Math.exp(-Math.pow(r - R * 0.92, 2) / (R * R * 0.006));   // fresnel 亮邊
+      let sw = 0;
+      if (r < R) {
+        const phase = a * arms + (r / R) * twist + rot;
+        sw = Math.pow((Math.cos(phase) + 1) / 2, 2.5) * (1 - r / R) * 0.4 * (0.6 + tex[idx] * 0.7);
+      }
+      const inside = 1 - sstep(R * 0.96, R * 1.05, r);
+      out[idx] = Math.min(1, (core * 0.85 + sw) * inside + rim * 0.75);
+    }
+  }
+  return out;
+}
+
+// 放射光芒：不等長不等亮的放射線（聖光/nova/警示）+ 中心光核
+function generateRays(size, octaves, seed, freqScale) {
+  const rng = new RNG((seed * 74093 + 151) >>> 0 || 1); rng.next();
+  const k = Math.max(0.2, Math.min(1.6, freqScale));
+  const nRay = 6 + octaves;                                  // 光芒數
+  const rot = rng.rand() * Math.PI * 2;
+  const lens = [], brs = [], wds = [];
+  for (let i = 0; i < nRay; i++) {
+    lens.push((0.22 + rng.rand() * 0.22) * k);
+    brs.push(0.5 + rng.rand() * 0.5);
+    wds.push(0.28 + rng.rand() * 0.45);
+  }
+  const sect = Math.PI * 2 / nRay;
+  const out = new Float32Array(size * size);
+  for (let j = 0; j < size; j++) {
+    const dy = j / size - 0.5;
+    for (let i = 0; i < size; i++) {
+      const dx = i / size - 0.5;
+      const r = Math.hypot(dx, dy);
+      let a = Math.atan2(dy, dx) - rot;
+      a = ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      const si = Math.floor(a / sect) % nRay;
+      const da = (a - (si + 0.5) * sect) / (sect * 0.5);     // -1..1 扇區內位置
+      const wa = wds[si] * (1 - r / (lens[si] + 1e-6) * 0.55);   // 越遠越尖
+      const ray = Math.exp(-(da * da) / (wa * wa + 1e-6)) * brs[si]
+                * (1 - sstep(lens[si] * 0.55, lens[si], r));
+      const core = Math.exp(-(r * r) / (0.0022 * k * k));
+      out[j * size + i] = Math.min(1, ray + core);
+    }
+  }
+  return out;
+}
 
 // ============================================================
 // Generator map / labels / groups
@@ -1476,6 +1842,16 @@ const GENERATORS = {
   stylizedimpact: generateStylizedImpact,
   splatter:   generateSplatter,
   inkring:    generateInkRing,
+  beam:       generateBeam,
+  bubble:     generateBubble,
+  ripple:     generateRipple,
+  vortex:     generateVortex,
+  snowflake:  generateSnowflake,
+  trailramp:  generateTrailRamp,
+  caustics:   generateCaustics,
+  arcring:    generateArcRing,
+  orb:        generateOrb,
+  rays:       generateRays,
 };
 
 const TYPE_LABELS = [
@@ -1498,18 +1874,29 @@ const TYPE_LABELS = [
   ['stylizedimpact','✸ StylizedImpact 風格化衝擊'],
   ['splatter',   '🩸 Splatter    飛濺液滴'],
   ['inkring',    '⭕ InkRing     手繪墨圈'],
+  ['beam',       '🔋 Beam        能量光束'],
+  ['bubble',     '🫧 Bubble      泡泡'],
+  ['ripple',     '💧 Ripple      水面漣漪'],
+  ['vortex',     '🌀 Vortex      漩渦'],
+  ['snowflake',  '❄ Snowflake   雪花冰晶'],
+  ['trailramp',  '➡ TrailRamp   拖尾漸層'],
+  ['caustics',   '🌊 Caustics    水下焦散'],
+  ['arcring',    '⭘ ArcRing     電弧環'],
+  ['orb',        '🔮 Orb         能量球'],
+  ['rays',       '☀ Rays        放射光芒'],
 ];
 const TYPE_MAP = Object.fromEntries(TYPE_LABELS);
 
 const TYPE_GROUPS = [
   { label: '打擊 Strike', keys: ['slash','bolt','crossslash','glint'] },
   { label: '爆發 Burst',  keys: ['shockwave','muzzleflash','sparks','groundcrack','cellcrack','stylizedimpact'] },
-  { label: '光暈 Glow',   keys: ['glow','starglow','ringglow','anamorph'] },
+  { label: '光暈 Glow',   keys: ['glow','starglow','ringglow','anamorph','beam','rays'] },
   { label: '煙霧 Smoke',  keys: ['celsmoke'] },
   { label: '石頭 Rock',   keys: ['rock'] },
   { label: '火焰 Fire',   keys: ['flame'] },
-  { label: '液體 Liquid', keys: ['splatter'] },
-  { label: '魔法 Magic',  keys: ['inkring'] },
+  { label: '液體 Liquid', keys: ['splatter','bubble','ripple','caustics'] },
+  { label: '魔法 Magic',  keys: ['inkring','vortex','snowflake','arcring','orb'] },
+  { label: '拖尾 Trail',  keys: ['trailramp'] },
 ];
 
 // ============================================================
@@ -1559,6 +1946,26 @@ const PARAM_SCHEMAS = {
                {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:140,def:100,fmt:fmtX}],
   inkring:    [{k:'oct',map:'octaves',zh:'不規則度',en:'Irregularity',min:4,max:12,def:8},
                {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:5,max:140,def:100,fmt:fmtX}],
+  beam:       [{k:'oct',map:'octaves',zh:'能量紋理',en:'Energy texture',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'寬度',en:'Width',min:10,max:200,def:100,fmt:fmtX}],
+  bubble:     [{k:'oct',map:'octaves',zh:'殼厚',en:'Shell',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX}],
+  ripple:     [{k:'oct',map:'octaves',zh:'圈數',en:'Rings',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'間距',en:'Spacing',min:10,max:160,def:100,fmt:fmtX}],
+  vortex:     [{k:'oct',map:'octaves',zh:'旋臂數',en:'Arms',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX}],
+  snowflake:  [{k:'oct',map:'octaves',zh:'側枝數',en:'Branches',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX}],
+  trailramp:  [{k:'oct',map:'octaves',zh:'紋理層',en:'Texture',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'粗細',en:'Thickness',min:10,max:200,def:100,fmt:fmtX}],
+  caustics:   [{k:'oct',map:'octaves',zh:'密度',en:'Density',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'尺度',en:'Scale',min:20,max:200,def:100,fmt:fmtX}],
+  arcring:    [{k:'oct',map:'octaves',zh:'鋸齒強度',en:'Jaggedness',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:20,max:140,def:100,fmt:fmtX}],
+  orb:        [{k:'oct',map:'octaves',zh:'內旋紋',en:'Inner swirl',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:20,max:160,def:100,fmt:fmtX}],
+  rays:       [{k:'oct',map:'octaves',zh:'光芒數',en:'Ray count',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'長度',en:'Length',min:20,max:160,def:100,fmt:fmtX}],
 };
 
 // 每型參數值（session 內記憶）
@@ -1620,6 +2027,15 @@ const ANIM = {
   cellcrack:      t => ({ freqMul: 0.30 + t * 0.8,  fade: 1 - sstep(0.7, 1, t) * 0.6 }),
   stylizedimpact: t => ({ freqMul: 0.30 + t * 0.9,  fade: 1 - sstep(0.65, 1, t) * 0.75 }),
   inkring:        t => ({ freqMul: 0.35 + t * 0.75, fade: 1 - sstep(0.7, 1, t) * 0.7 }),
+  beam:           t => ({ freqMul: 1 + Math.sin(t * Math.PI * 2) * 0.18, fade: 1 }),
+  bubble:         t => ({ freqMul: 0.35 + t * 0.85, fade: 1 - sstep(0.85, 1, t) }),
+  ripple:         t => ({ freqMul: 0.30 + t * 1.0,  fade: 1 - t * 0.55 }),
+  vortex:         t => ({ freqMul: 0.40 + t * 0.8,  fade: 1 - sstep(0.7, 1, t) * 0.6 }),
+  snowflake:      t => ({ freqMul: 0.30 + t * 0.9,  fade: 1 }),
+  caustics:       t => ({ freqMul: 1 + Math.sin(t * Math.PI * 2) * 0.12, fade: 1 }),
+  arcring:        t => ({ freqMul: 0.35 + t * 0.85, fade: 1 - sstep(0.75, 1, t) * 0.7 }),
+  orb:            t => ({ freqMul: 1 + Math.sin(t * Math.PI * 2) * 0.10, fade: 1 }),
+  rays:           t => ({ freqMul: 0.30 + t * 0.95, fade: 1 - sstep(0.7, 1, t) * 0.65 }),
 };
 // 套用 t → 回傳調整後的完整參數物件（無動畫的類型回傳原樣）
 // force=true（序列幀匯出）：t=0 也套演化 → 第 0 幀是動畫起點；
@@ -1637,29 +2053,76 @@ function animApply(p, t, force) {
 let fxStack = [];
 
 const STACK_OPS = [
-  ['warp',   '🌀 Warp 扭曲',  'Warp'],
-  ['blur',   '◌ Blur 模糊',   'Blur'],
-  ['levels', '◧ Levels 色階', 'Levels'],
-  ['invert', '⇋ Invert 反轉', 'Invert'],
+  ['warp',    '🌀 Warp 扭曲',        'Warp'],
+  ['blur',    '◌ Blur 模糊',         'Blur'],
+  ['sharpen', '△ Sharpen 銳化',      'Sharpen'],
+  ['levels',  '◧ Levels 色階',       'Levels'],
+  ['thresh',  '◐ Threshold 二值化',  'Threshold'],
+  ['invert',  '⇋ Invert 反轉',       'Invert'],
+  ['mirror',  '⇔ Mirror 鏡像',       'Mirror'],
+  ['radmask', '◎ RadialMask 放射遮罩','Radial mask'],
+  ['rotate',  '↻ Rotate 旋轉',       'Rotate'],
 ];
 const BLEND_NAMES = { add:['加法','Add'], multiply:['乘法','Mul'], subtract:['減去','Sub'],
                       max:['最大','Max'], min:['最小','Min'], screen:['濾色','Scr'] };
 const STACK_PRESETS = {
+  // — 煙 / 火 —
   energysmoke: { zh:'⚡ 能量煙（煙+閃電+扭曲）', en:'⚡ Energy smoke',
     base:'celsmoke', st:[{op:'gen',type:'bolt',blend:'add',opacity:85,scale:100,seedOfs:3},{op:'warp',amp:22,freq:3,seedOfs:0}] },
-  bursthit: { zh:'💥 碎裂衝擊（衝擊+火花+波環）', en:'💥 Burst hit',
-    base:'stylizedimpact', st:[{op:'gen',type:'sparks',blend:'add',opacity:100,scale:115,seedOfs:5},{op:'gen',type:'shockwave',blend:'add',opacity:55,scale:125,seedOfs:2}] },
-  magicseal: { zh:'✨ 魔法印記（墨圈+星芒+扭曲）', en:'✨ Magic seal',
-    base:'inkring', st:[{op:'gen',type:'starglow',blend:'add',opacity:80,scale:100,seedOfs:1},{op:'warp',amp:12,freq:4,seedOfs:0}] },
+  tornsmoke: { zh:'☠ 破碎毒霧（煙−細胞裂+扭曲）', en:'☠ Torn poison smoke',
+    base:'celsmoke', st:[{op:'gen',type:'cellcrack',blend:'subtract',opacity:45,scale:100,seedOfs:2},{op:'warp',amp:28,freq:4,seedOfs:1}] },
+  fireburst: { zh:'🔥 爆炎（火焰+火花+光暈）', en:'🔥 Fire burst',
+    base:'flame', st:[{op:'gen',type:'sparks',blend:'add',opacity:90,scale:120,seedOfs:4},{op:'gen',type:'glow',blend:'add',opacity:35,scale:120,seedOfs:0}] },
+  // — 打擊 —
   eroded: { zh:'🪨 侵蝕斬擊（斬擊×細胞裂）', en:'🪨 Eroded slash',
     base:'slash', st:[{op:'warp',amp:30,freq:5,seedOfs:0},{op:'gen',type:'cellcrack',blend:'multiply',opacity:70,scale:100,seedOfs:0}] },
+  thunderslash: { zh:'⚡ 雷光斬（斬擊+閃電+光暈）', en:'⚡ Thunder slash',
+    base:'slash', st:[{op:'gen',type:'bolt',blend:'add',opacity:80,scale:100,seedOfs:2},{op:'gen',type:'glow',blend:'add',opacity:30,scale:110,seedOfs:0}] },
+  crossburst: { zh:'✖ 十字爆閃（交叉斬+閃點+波環）', en:'✖ Cross burst',
+    base:'crossslash', st:[{op:'gen',type:'glint',blend:'add',opacity:90,scale:90,seedOfs:1},{op:'gen',type:'shockwave',blend:'add',opacity:50,scale:110,seedOfs:3}] },
+  // — 爆發 —
+  bursthit: { zh:'💥 碎裂衝擊（衝擊+火花+波環）', en:'💥 Burst hit',
+    base:'stylizedimpact', st:[{op:'gen',type:'sparks',blend:'add',opacity:100,scale:115,seedOfs:5},{op:'gen',type:'shockwave',blend:'add',opacity:55,scale:125,seedOfs:2}] },
+  lavaground: { zh:'🌋 熔岩地裂（細胞裂+放射裂+光暈）', en:'🌋 Lava ground',
+    base:'cellcrack', st:[{op:'gen',type:'groundcrack',blend:'add',opacity:70,scale:100,seedOfs:1},{op:'gen',type:'glow',blend:'add',opacity:30,scale:100,seedOfs:0}] },
+  // — 魔法 —
+  magicseal: { zh:'✨ 魔法印記（墨圈+星芒+扭曲）', en:'✨ Magic seal',
+    base:'inkring', st:[{op:'gen',type:'starglow',blend:'add',opacity:80,scale:100,seedOfs:1},{op:'warp',amp:12,freq:4,seedOfs:0}] },
+  frostseal: { zh:'❄ 冰霜法陣（墨圈+雪花+星芒）', en:'❄ Frost seal',
+    base:'inkring', st:[{op:'gen',type:'snowflake',blend:'add',opacity:85,scale:75,seedOfs:1},{op:'gen',type:'starglow',blend:'add',opacity:55,scale:100,seedOfs:2}] },
+  vortexpower: { zh:'🌀 能量漩渦（漩渦+光暈+扭曲）', en:'🌀 Power vortex',
+    base:'vortex', st:[{op:'gen',type:'glow',blend:'add',opacity:45,scale:80,seedOfs:0},{op:'warp',amp:18,freq:3,seedOfs:2}] },
+  // — 液體 —
+  acidsplat: { zh:'🧪 酸液飛濺（飛濺+泡泡+扭曲）', en:'🧪 Acid splat',
+    base:'splatter', st:[{op:'gen',type:'bubble',blend:'add',opacity:60,scale:45,seedOfs:3},{op:'warp',amp:15,freq:5,seedOfs:1}] },
+  waterring: { zh:'💧 水波紋（漣漪+扭曲+柔光）', en:'💧 Water ring',
+    base:'ripple', st:[{op:'warp',amp:14,freq:4,seedOfs:0},{op:'gen',type:'glow',blend:'add',opacity:25,scale:90,seedOfs:0}] },
+  // — 光束 / 拖尾 —
+  energybeam: { zh:'🔋 能量光束（光束+閃電+銳化）', en:'🔋 Energy beam',
+    base:'beam', st:[{op:'gen',type:'bolt',blend:'add',opacity:65,scale:100,seedOfs:2},{op:'sharpen',amt:40,rad:3}] },
+  manatrail: { zh:'✨ 魔力拖尾（拖尾+火花+扭曲）', en:'✨ Mana trail',
+    base:'trailramp', st:[{op:'gen',type:'sparks',blend:'add',opacity:70,scale:80,seedOfs:2},{op:'warp',amp:12,freq:4,seedOfs:0}] },
+  // — 水 / 雷 / 聖光 —
+  causticpool: { zh:'🌊 焦散水池（焦散×放射遮罩）', en:'🌊 Caustic pool',
+    base:'caustics', st:[{op:'radmask',inner:35,outer:85},{op:'gen',type:'ripple',blend:'add',opacity:30,scale:110,seedOfs:1}] },
+  shieldring: { zh:'🛡 雷電護盾（電弧環+光環+光暈）', en:'🛡 Shield ring',
+    base:'arcring', st:[{op:'gen',type:'ringglow',blend:'add',opacity:55,scale:100,seedOfs:0},{op:'gen',type:'glow',blend:'add',opacity:25,scale:100,seedOfs:0}] },
+  soulorb: { zh:'🔮 靈魂寶珠（能量球+漩渦+柔光）', en:'🔮 Soul orb',
+    base:'orb', st:[{op:'gen',type:'vortex',blend:'add',opacity:40,scale:75,seedOfs:2},{op:'gen',type:'glow',blend:'add',opacity:30,scale:90,seedOfs:0}] },
+  holynova: { zh:'☀ 聖光爆發（光芒+波環+柔光）', en:'☀ Holy nova',
+    base:'rays', st:[{op:'gen',type:'shockwave',blend:'add',opacity:60,scale:110,seedOfs:1},{op:'gen',type:'glow',blend:'add',opacity:40,scale:110,seedOfs:0}] },
 };
 
 function stackLayerDefaults(kind, type) {
-  if (kind === 'gen')    return { op:'gen', type, blend:'add', opacity:100, scale:100, seedOfs:1 };
-  if (kind === 'warp')   return { op:'warp', amp:30, freq:3, seedOfs:0 };
-  if (kind === 'blur')   return { op:'blur', rad:4 };
-  if (kind === 'levels') return { op:'levels', lo:0, hi:100, gamma:10 };
+  if (kind === 'gen')     return { op:'gen', type, blend:'add', opacity:100, scale:100, seedOfs:1 };
+  if (kind === 'warp')    return { op:'warp', amp:30, freq:3, seedOfs:0 };
+  if (kind === 'blur')    return { op:'blur', rad:4 };
+  if (kind === 'sharpen') return { op:'sharpen', amt:50, rad:3 };
+  if (kind === 'levels')  return { op:'levels', lo:0, hi:100, gamma:10 };
+  if (kind === 'thresh')  return { op:'thresh', pos:50, soft:10 };
+  if (kind === 'mirror')  return { op:'mirror', axis:'x' };
+  if (kind === 'radmask') return { op:'radmask', inner:30, outer:70 };
+  if (kind === 'rotate')  return { op:'rotate', ang:90 };
   return { op:'invert' };
 }
 
@@ -1771,9 +2234,31 @@ function renderStackUI() {
       mkStackSlider(div, en ? 'Freq' : '頻率', 2, 8, L.freq, v => L.freq = v);
     } else if (L.op === 'blur') {
       mkStackSlider(div, en ? 'Radius' : '半徑', 1, 24, L.rad, v => L.rad = v);
+    } else if (L.op === 'sharpen') {
+      mkStackSlider(div, en ? 'Amount' : '強度', 0, 100, L.amt, v => L.amt = v);
+      mkStackSlider(div, en ? 'Radius' : '半徑', 1, 12, L.rad, v => L.rad = v);
     } else if (L.op === 'levels') {
       mkStackSlider(div, en ? 'Black' : '黑點', 0, 95, L.lo, v => L.lo = v);
       mkStackSlider(div, en ? 'White' : '白點', 5, 100, L.hi, v => L.hi = v);
+    } else if (L.op === 'thresh') {
+      mkStackSlider(div, en ? 'Position' : '位置', 0, 100, L.pos, v => L.pos = v);
+      mkStackSlider(div, en ? 'Soft' : '柔邊', 0, 50, L.soft, v => L.soft = v);
+    } else if (L.op === 'mirror') {
+      const axSel = document.createElement('select');
+      [['x', en ? 'Left↔Right' : '左右對稱'], ['y', en ? 'Top↕Bottom' : '上下對稱']].forEach(([v, n]) => {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = n;
+        if (v === L.axis) o.selected = true;
+        axSel.appendChild(o);
+      });
+      axSel.style.width = '100%'; axSel.style.marginTop = '4px';
+      axSel.addEventListener('change', () => { L.axis = axSel.value; schedulePreview(); });
+      div.appendChild(axSel);
+    } else if (L.op === 'radmask') {
+      mkStackSlider(div, en ? 'Inner' : '內徑', 0, 100, L.inner, v => L.inner = v);
+      mkStackSlider(div, en ? 'Outer' : '外徑', 5, 120, L.outer, v => L.outer = v);
+    } else if (L.op === 'rotate') {
+      mkStackSlider(div, en ? 'Angle' : '角度', 0, 355, L.ang, v => L.ang = v);
     }
     list.appendChild(div);
   });
@@ -2274,10 +2759,12 @@ function initWorker() {
       generateRingGlow, generateAnamorph, generateCelSmoke, generateRock, generateFlame,
       generateShockwave, generateMuzzleFlash, generateSparks, generateGroundCrack, generateCellCrack,
       generateStylizedImpact, generateSplatter, generateInkRing,
+      generateBeam, generateBubble, generateRipple, generateVortex, generateSnowflake, generateTrailRamp,
+      generateCaustics, generateArcRing, generateOrb, generateRays,
       postprocess, celShade, boxBlurH, boxBlurV, applyGlow, celActive, finalizeField,
       downsampleField, downsampleRect, shiftField, computeFinal];
     const src = fns.map(f => f.toString()).join('\n\n') +
-      '\nconst GENERATORS={slash:generateSlash,bolt:generateBolt,crossslash:generateCrossSlash,glint:generateGlint,glow:generateGlow,starglow:generateStarGlow,ringglow:generateRingGlow,anamorph:generateAnamorph,celsmoke:generateCelSmoke,rock:generateRock,flame:generateFlame,shockwave:generateShockwave,muzzleflash:generateMuzzleFlash,sparks:generateSparks,groundcrack:generateGroundCrack,cellcrack:generateCellCrack,stylizedimpact:generateStylizedImpact,splatter:generateSplatter,inkring:generateInkRing};\n' +
+      '\nconst GENERATORS={slash:generateSlash,bolt:generateBolt,crossslash:generateCrossSlash,glint:generateGlint,glow:generateGlow,starglow:generateStarGlow,ringglow:generateRingGlow,anamorph:generateAnamorph,celsmoke:generateCelSmoke,rock:generateRock,flame:generateFlame,shockwave:generateShockwave,muzzleflash:generateMuzzleFlash,sparks:generateSparks,groundcrack:generateGroundCrack,cellcrack:generateCellCrack,stylizedimpact:generateStylizedImpact,splatter:generateSplatter,inkring:generateInkRing,beam:generateBeam,bubble:generateBubble,ripple:generateRipple,vortex:generateVortex,snowflake:generateSnowflake,trailramp:generateTrailRamp,caustics:generateCaustics,arcring:generateArcRing,orb:generateOrb,rays:generateRays};\n' +
       'self.onmessage=function(e){const d=e.data;try{let out;' +
       'if(d.op==="gen"){out=evalStack(d.size,Object.assign({},d.p,{type:d.type,octaves:d.octaves,seed:d.seed,freqScale:d.freq}));}' +
       'else{out=computeFinal(d.type,d.w,d.h,d.octaves,d.seed,d.freq,d.p);}' +
