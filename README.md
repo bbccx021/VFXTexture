@@ -24,6 +24,7 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 
 ## 功能 / Features
 
+- **🧱 組合堆疊（差異性核心）**：基底特效之後可疊任意層 —— 19 種特效層（加法／乘法／減去／最大／最小／濾色混合 + 不透明度／縮放／獨立 seed）與 Warp 扭曲／模糊／色階／反轉運算層，可排序、可刪除；附一鍵範例組合（能量煙、碎裂衝擊、魔法印記、侵蝕斬擊）；堆疊進分享連結，全程 Worker 運算 composite stack (linear node chain)
 - **每型專屬參數面板**：每種特效宣告自己的參數（名稱／範圍對齊實際行為，滑桿無死區），選特效自動切換 per-type param schema
 - **動畫 / 序列幀**：時間 t 演化（煙消散、衝擊波擴張、碎片炸開、火焰搖曳…），t 滑桿即時預覽單幀，一鍵匯出 **flipbook Sheet**（單張網格）或各幀 ZIP
 - **Web Worker 渲染**：生成運算在背景執行緒，拖滑桿與批次匯出 UI 不凍結（不支援環境自動 fallback）

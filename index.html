@@ -71,6 +71,12 @@ input[type=range]{flex:1;accent-color:var(--accent);height:3px}
 input[type=number]{background:var(--entry);color:var(--text);border:1px solid var(--border);
   border-radius:6px;padding:5px 9px;font-family:'Consolas',monospace;font-size:13px;outline:none;width:80px;transition:border-color .15s}
 input[type=number]:focus{border-color:var(--accent)}
+select{background:var(--entry);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;outline:none;font-family:inherit}
+select:focus{border-color:var(--accent)}
+.stack-layer{background:var(--entry);border:1px solid var(--border);border-radius:6px;padding:5px 8px;margin:4px 0}
+.stack-hdr{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text)}
+.stack-hdr .mini{background:none;border:none;color:var(--dim);cursor:pointer;font-size:12px;padding:1px 4px}
+.stack-hdr .mini:hover{color:var(--text)}
 .seed-row{display:flex;gap:6px;align-items:center}
 /* ── Buttons ── */
 .btn{border:none;border-radius:7px;padding:9px 20px;font-family:'Segoe UI',system-ui,sans-serif;
@@ -231,6 +237,19 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
       </details>
 
       <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_stack">組合堆疊</summary>
+        <div class="chk-row" style="gap:6px;padding-bottom:2px">
+          <select id="stack-add-sel" style="flex:1"></select>
+          <button class="btn btn-rand" data-i18n="btn_stack_add" onclick="stackAdd()">＋ 加層</button>
+        </div>
+        <div class="chk-row" style="gap:6px;padding-bottom:4px">
+          <span class="sl-lbl" data-i18n="lbl_preset" style="min-width:44px">範例</span>
+          <select id="stack-preset-sel" style="flex:1"></select>
+        </div>
+        <div id="stack-list"></div>
+      </details>
+
+      <details class="section" open>
         <summary class="sec-hdr" data-i18n="sec_cel">卡通風格</summary>
         <div class="radio-row" id="style-row" style="padding:2px 0 4px">
           <label><input type="radio" name="fxstyle" value="none" checked> <span data-i18n="style_none">無</span></label>
@@ -357,6 +376,7 @@ const I18N = {
   lbl_ratio:['比例','Ratio'], lbl_anchor:['錨點','Anchor'],
   an_c:['中','C'], an_l:['左','L'], an_r:['右','R'], an_u:['上','T'], an_d:['下','B'],
   btn_hdr:['⬇ HDR','⬇ HDR'],
+  sec_stack:['組合堆疊','Composite Stack'], btn_stack_add:['＋ 加層','＋ Add'], lbl_preset:['範例','Preset'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
   lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'],
   chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
@@ -389,7 +409,8 @@ function setLang(l) {
   LANG = l;
   try { localStorage.setItem('fxsprite_lang', l); } catch(e){}
   applyI18n();
-  buildCmapRadios(); buildTypeList(); buildTypeParams(currentType); applyPreviewTab();
+  buildCmapRadios(); buildTypeList(); buildTypeParams(currentType);
+  buildStackSelects(); renderStackUI(); applyPreviewTab();
   updateResInfo();
   setLive(t('live_live'), 'var(--green)');
 }
@@ -791,6 +812,80 @@ function cellsF1F2(pts, n, qx, qy) {
     }
   }
   return { f1, f2 };
+}
+
+// Blend：兩場混合（add / multiply / subtract / max / min / screen）+ 不透明度
+function blendFields(a, b, mode, opac) {
+  const out = new Float32Array(a.length);
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i];
+    let v;
+    switch (mode) {
+      case 'multiply': v = x * y; break;
+      case 'subtract': v = Math.max(0, x - y); break;
+      case 'max':      v = Math.max(x, y); break;
+      case 'min':      v = Math.min(x, y); break;
+      case 'screen':   v = 1 - (1 - Math.min(1, x)) * (1 - Math.min(1, y)); break;
+      default:         v = x + y;                       // add
+    }
+    out[i] = x + (v - x) * opac;
+  }
+  return out;
+}
+
+// Warp：fbm 域扭曲既有場（Substance Warp 節點等效，作用於結果而非座標）
+function warpField(field, size, amp, freq, seed) {
+  const wx = fbm(size, 4, freq, 2, 0.5, (seed ^ 0x1cf3) >>> 0, 1);
+  const wy = fbm(size, 4, freq, 2, 0.5, (seed ^ 0x8e21) >>> 0, 1);
+  const out = new Float32Array(field.length);
+  const a = amp * size;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      let sx = x + (wx[i] - 0.5) * 2 * a;
+      let sy = y + (wy[i] - 0.5) * 2 * a;
+      sx = sx < 0 ? 0 : sx > size - 1.001 ? size - 1.001 : sx;
+      sy = sy < 0 ? 0 : sy > size - 1.001 ? size - 1.001 : sy;
+      const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0;
+      const r0 = y0 * size + x0;
+      out[i] = field[r0] * (1 - fx) * (1 - fy) + field[r0 + 1] * fx * (1 - fy)
+             + field[r0 + size] * (1 - fx) * fy + field[r0 + size + 1] * fx * fy;
+    }
+  }
+  return out;
+}
+
+// Blur op：盒式模糊 ×3（半徑隨解析度縮放）
+function blurOp(field, size, radPx) {
+  const r = Math.max(1, Math.round(radPx * size / 256));
+  let a = field.slice(), b = new Float32Array(field.length);
+  for (let p = 0; p < 3; p++) { boxBlurH(a, b, size, r); boxBlurV(b, a, size, r); }
+  return a;
+}
+
+// 組合堆疊求值：基底特效 → 逐層套用（混合層 / Warp / Blur / 色階 / 反轉）
+// stack 為可序列化陣列 → worker 直接執行
+function evalStack(size, p) {
+  let field = GENERATORS[p.type](size, p.octaves, p.seed, p.freqScale, p);
+  const stack = p.stack || [];
+  for (let li = 0; li < stack.length; li++) {
+    const L = stack[li];
+    if (L.op === 'gen') {
+      const f2 = GENERATORS[L.type](size, L.oct || 8, p.seed + (L.seedOfs || 0) * 131, (L.scale || 100) / 100, p);
+      field = blendFields(field, f2, L.blend || 'add', (L.opacity == null ? 100 : L.opacity) / 100);
+    } else if (L.op === 'warp') {
+      field = warpField(field, size, (L.amp || 30) / 1000, L.freq || 3, p.seed + 977 + (L.seedOfs || 0) * 53);
+    } else if (L.op === 'blur') {
+      field = blurOp(field, size, L.rad || 4);
+    } else if (L.op === 'levels') {
+      field = postprocess(field, (L.gamma || 10) / 10, false, 0, 1, (L.lo || 0) / 100, (L.hi == null ? 100 : L.hi) / 100);
+    } else if (L.op === 'invert') {
+      const inv = new Float32Array(field.length);
+      for (let i = 0; i < field.length; i++) inv[i] = 1 - Math.min(1, Math.max(0, field[i]));
+      field = inv;
+    }
+  }
+  return field;
 }
 
 // 共用：一組球體 → 兩色調卡通雲場（holes 為可選負空間缺口，洞緣自帶陰影圈）
@@ -1537,6 +1632,154 @@ function animApply(p, t, force) {
 }
 
 // ============================================================
+// 組合堆疊 — 線性節點鏈 UI（差異性層：使用者自由組合特效與運算）
+// ============================================================
+let fxStack = [];
+
+const STACK_OPS = [
+  ['warp',   '🌀 Warp 扭曲',  'Warp'],
+  ['blur',   '◌ Blur 模糊',   'Blur'],
+  ['levels', '◧ Levels 色階', 'Levels'],
+  ['invert', '⇋ Invert 反轉', 'Invert'],
+];
+const BLEND_NAMES = { add:['加法','Add'], multiply:['乘法','Mul'], subtract:['減去','Sub'],
+                      max:['最大','Max'], min:['最小','Min'], screen:['濾色','Scr'] };
+const STACK_PRESETS = {
+  energysmoke: { zh:'⚡ 能量煙（煙+閃電+扭曲）', en:'⚡ Energy smoke',
+    base:'celsmoke', st:[{op:'gen',type:'bolt',blend:'add',opacity:85,scale:100,seedOfs:3},{op:'warp',amp:22,freq:3,seedOfs:0}] },
+  bursthit: { zh:'💥 碎裂衝擊（衝擊+火花+波環）', en:'💥 Burst hit',
+    base:'stylizedimpact', st:[{op:'gen',type:'sparks',blend:'add',opacity:100,scale:115,seedOfs:5},{op:'gen',type:'shockwave',blend:'add',opacity:55,scale:125,seedOfs:2}] },
+  magicseal: { zh:'✨ 魔法印記（墨圈+星芒+扭曲）', en:'✨ Magic seal',
+    base:'inkring', st:[{op:'gen',type:'starglow',blend:'add',opacity:80,scale:100,seedOfs:1},{op:'warp',amp:12,freq:4,seedOfs:0}] },
+  eroded: { zh:'🪨 侵蝕斬擊（斬擊×細胞裂）', en:'🪨 Eroded slash',
+    base:'slash', st:[{op:'warp',amp:30,freq:5,seedOfs:0},{op:'gen',type:'cellcrack',blend:'multiply',opacity:70,scale:100,seedOfs:0}] },
+};
+
+function stackLayerDefaults(kind, type) {
+  if (kind === 'gen')    return { op:'gen', type, blend:'add', opacity:100, scale:100, seedOfs:1 };
+  if (kind === 'warp')   return { op:'warp', amp:30, freq:3, seedOfs:0 };
+  if (kind === 'blur')   return { op:'blur', rad:4 };
+  if (kind === 'levels') return { op:'levels', lo:0, hi:100, gamma:10 };
+  return { op:'invert' };
+}
+
+function buildStackSelects() {
+  const sel = document.getElementById('stack-add-sel');
+  sel.innerHTML = '';
+  const ogGen = document.createElement('optgroup');
+  ogGen.label = LANG === 'en' ? 'Effect layer (blend)' : '特效層（混合）';
+  TYPE_LABELS.forEach(([k, label]) => {
+    const o = document.createElement('option');
+    o.value = 'gen:' + k; o.textContent = typeLabelDisp(label).trim();
+    ogGen.appendChild(o);
+  });
+  const ogOp = document.createElement('optgroup');
+  ogOp.label = LANG === 'en' ? 'Operation' : '運算';
+  STACK_OPS.forEach(([k, zh, en]) => {
+    const o = document.createElement('option');
+    o.value = 'op:' + k; o.textContent = LANG === 'en' ? en : zh;
+    ogOp.appendChild(o);
+  });
+  sel.appendChild(ogOp); sel.appendChild(ogGen);
+  const ps = document.getElementById('stack-preset-sel');
+  ps.innerHTML = '';
+  const o0 = document.createElement('option');
+  o0.value = ''; o0.textContent = LANG === 'en' ? '— pick a combo —' : '— 選擇範例組合 —';
+  ps.appendChild(o0);
+  Object.entries(STACK_PRESETS).forEach(([k, v]) => {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = LANG === 'en' ? v.en : v.zh;
+    ps.appendChild(o);
+  });
+}
+
+function stackAdd() {
+  const v = document.getElementById('stack-add-sel').value;
+  const [kind, type] = v.split(':');
+  fxStack.push(stackLayerDefaults(kind === 'gen' ? 'gen' : type, type));
+  renderStackUI();
+  schedulePreview();
+}
+
+function stackApplyPreset(key) {
+  const pr = STACK_PRESETS[key];
+  if (!pr) return;
+  fxStack = JSON.parse(JSON.stringify(pr.st));
+  selectType(pr.base);                                    // selectType 內含 schedulePreview
+  renderStackUI();
+}
+
+function mkStackSlider(box, label, min, max, val, cb) {
+  const row = document.createElement('div');
+  row.className = 'sl-row';
+  const lb = document.createElement('span');
+  lb.className = 'sl-lbl'; lb.textContent = label; lb.style.minWidth = '52px';
+  const inp = document.createElement('input');
+  inp.type = 'range'; inp.min = min; inp.max = max; inp.value = val;
+  const vv = document.createElement('span');
+  vv.className = 'sl-val'; vv.textContent = val;
+  inp.addEventListener('input', e => { vv.textContent = e.target.value; cb(parseInt(e.target.value)); schedulePreview(); });
+  row.appendChild(lb); row.appendChild(inp); row.appendChild(vv);
+  box.appendChild(row);
+}
+
+function renderStackUI() {
+  const list = document.getElementById('stack-list');
+  list.innerHTML = '';
+  fxStack.forEach((L, i) => {
+    const div = document.createElement('div');
+    div.className = 'stack-layer';
+    const hdr = document.createElement('div');
+    hdr.className = 'stack-hdr';
+    let name;
+    if (L.op === 'gen') name = typeLabelDisp(TYPE_MAP[L.type] || L.type).trim();
+    else { const d = STACK_OPS.find(o => o[0] === L.op); name = d ? (LANG === 'en' ? d[2] : d[1]) : L.op; }
+    const title = document.createElement('span');
+    title.textContent = `${i + 1}. ${name}`;
+    title.style.flex = '1';
+    hdr.appendChild(title);
+    if (L.op === 'gen') {
+      const bs = document.createElement('select');
+      Object.entries(BLEND_NAMES).forEach(([k, n]) => {
+        const o = document.createElement('option');
+        o.value = k; o.textContent = LANG === 'en' ? n[1] : n[0];
+        if (k === L.blend) o.selected = true;
+        bs.appendChild(o);
+      });
+      bs.addEventListener('change', () => { L.blend = bs.value; schedulePreview(); });
+      hdr.appendChild(bs);
+      const dice = document.createElement('button');
+      dice.className = 'mini'; dice.textContent = '🎲'; dice.title = 'reroll';
+      dice.addEventListener('click', () => { L.seedOfs = (L.seedOfs || 0) + 1; schedulePreview(); });
+      hdr.appendChild(dice);
+    }
+    [['↑', () => { if (i > 0) { [fxStack[i-1], fxStack[i]] = [fxStack[i], fxStack[i-1]]; renderStackUI(); schedulePreview(); } }],
+     ['↓', () => { if (i < fxStack.length - 1) { [fxStack[i+1], fxStack[i]] = [fxStack[i], fxStack[i+1]]; renderStackUI(); schedulePreview(); } }],
+     ['×', () => { fxStack.splice(i, 1); renderStackUI(); schedulePreview(); }]].forEach(([txt, fn]) => {
+      const b = document.createElement('button');
+      b.className = 'mini'; b.textContent = txt;
+      b.addEventListener('click', fn);
+      hdr.appendChild(b);
+    });
+    div.appendChild(hdr);
+    const en = LANG === 'en';
+    if (L.op === 'gen') {
+      mkStackSlider(div, en ? 'Opacity' : '不透明', 0, 100, L.opacity, v => L.opacity = v);
+      mkStackSlider(div, en ? 'Scale' : '縮放', 5, 200, L.scale, v => L.scale = v);
+    } else if (L.op === 'warp') {
+      mkStackSlider(div, en ? 'Amount' : '強度', 0, 100, L.amp, v => L.amp = v);
+      mkStackSlider(div, en ? 'Freq' : '頻率', 2, 8, L.freq, v => L.freq = v);
+    } else if (L.op === 'blur') {
+      mkStackSlider(div, en ? 'Radius' : '半徑', 1, 24, L.rad, v => L.rad = v);
+    } else if (L.op === 'levels') {
+      mkStackSlider(div, en ? 'Black' : '黑點', 0, 95, L.lo, v => L.lo = v);
+      mkStackSlider(div, en ? 'White' : '白點', 5, 100, L.hi, v => L.hi = v);
+    }
+    list.appendChild(div);
+  });
+}
+
+// ============================================================
 // State
 // ============================================================
 let currentType = 'slash';
@@ -1588,6 +1831,7 @@ function getParams() {
     holeN:     tp.holeN !== undefined ? tp.holeN : 2,
     holeSize:  tp.holeSize !== undefined ? tp.holeSize : 1,
     holeSeed:  holeSeed,
+    stack:     fxStack,
     colormap:  document.querySelector('input[name=cmap]:checked')?.value || 'gray',
     gamma:     parseInt(document.getElementById('gamma').value) / 10,
     invert:    document.getElementById('invert').checked,
@@ -1991,10 +2235,10 @@ function shiftField(arr, W, H, ax, ay) {
   return out;
 }
 
-// 產生最終場（一律 2× 超取樣；支援非方形 W×H 與錨點平移）
+// 產生最終場（一律 2× 超取樣；支援非方形 W×H、錨點平移、組合堆疊）
 function computeFinal(type, W, H, octaves, seed, freqScale, p) {
   const SS = 2, big = W * SS;
-  const arr = GENERATORS[type](big, octaves, seed, freqScale, p);
+  const arr = evalStack(big, { ...p, type, octaves, seed, freqScale });
   const fin = finalizeField(arr, big, { ...p, seed });
   let out = downsampleRect(fin, big, W, H);
   if (p && (p.anchorX || p.anchorY)) out = shiftField(out, W, H, p.anchorX, p.anchorY);
@@ -2025,7 +2269,7 @@ const fxJobs = {};
 function initWorker() {
   try {
     const fns = [RNG, valueNoiseOctave, fbm, mapCoordsBilinear, normalize, sstep, segDist, smax,
-      makeCellPts, cellsF1F2, renderCloud,
+      makeCellPts, cellsF1F2, blendFields, warpField, blurOp, evalStack, renderCloud,
       generateSlash, generateBolt, generateCrossSlash, generateGlint, generateGlow, generateStarGlow,
       generateRingGlow, generateAnamorph, generateCelSmoke, generateRock, generateFlame,
       generateShockwave, generateMuzzleFlash, generateSparks, generateGroundCrack, generateCellCrack,
@@ -2035,7 +2279,7 @@ function initWorker() {
     const src = fns.map(f => f.toString()).join('\n\n') +
       '\nconst GENERATORS={slash:generateSlash,bolt:generateBolt,crossslash:generateCrossSlash,glint:generateGlint,glow:generateGlow,starglow:generateStarGlow,ringglow:generateRingGlow,anamorph:generateAnamorph,celsmoke:generateCelSmoke,rock:generateRock,flame:generateFlame,shockwave:generateShockwave,muzzleflash:generateMuzzleFlash,sparks:generateSparks,groundcrack:generateGroundCrack,cellcrack:generateCellCrack,stylizedimpact:generateStylizedImpact,splatter:generateSplatter,inkring:generateInkRing};\n' +
       'self.onmessage=function(e){const d=e.data;try{let out;' +
-      'if(d.op==="gen"){out=GENERATORS[d.type](d.size,d.octaves,d.seed,d.freq,d.p);}' +
+      'if(d.op==="gen"){out=evalStack(d.size,Object.assign({},d.p,{type:d.type,octaves:d.octaves,seed:d.seed,freqScale:d.freq}));}' +
       'else{out=computeFinal(d.type,d.w,d.h,d.octaves,d.seed,d.freq,d.p);}' +
       'self.postMessage({id:d.id,ok:1,buf:out.buffer},[out.buffer]);}' +
       'catch(err){self.postMessage({id:d.id,ok:0,msg:String(err)});}};';
@@ -2052,7 +2296,7 @@ function initWorker() {
 function fxRun(op, type, w, h, octaves, seed, freq, p) {
   if (!fxWorker) {
     return new Promise(res => setTimeout(() => res(
-      op === 'gen' ? GENERATORS[type](w, octaves, seed, freq, p)
+      op === 'gen' ? evalStack(w, { ...p, type, octaves, seed, freqScale: freq })
                    : computeFinal(type, w, h, octaves, seed, freq, p)), 0));
   }
   const id = ++fxJobId;
@@ -2396,6 +2640,7 @@ function shareURL() {
     c1: document.getElementById('col-dark').value.slice(1),
     c2: document.getElementById('col-light').value.slice(1),
   });
+  if (fxStack.length) q.set('st', JSON.stringify(fxStack));
   const url = location.origin + location.pathname + '?' + q.toString();
   const done = () => setStatus('🔗 copied', 'var(--green)');
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2472,6 +2717,12 @@ function applyParamsFromURL() {
   }
   if (q.get('c1') && /^[0-9a-fA-F]{6}$/.test(q.get('c1'))) document.getElementById('col-dark').value = '#' + q.get('c1');
   if (q.get('c2') && /^[0-9a-fA-F]{6}$/.test(q.get('c2'))) document.getElementById('col-light').value = '#' + q.get('c2');
+  if (q.get('st')) {
+    try {
+      const st = JSON.parse(q.get('st'));
+      if (Array.isArray(st)) fxStack = st.filter(L => L && typeof L.op === 'string');
+    } catch(e) {}
+  }
 }
 
 // ============================================================
@@ -2532,6 +2783,10 @@ function buildUI() {
   // Slider listeners
   document.querySelectorAll('input[name=ratio],input[name=anchor]').forEach(r =>
     r.addEventListener('change', () => { updateResInfo(); if (lastArr) renderTilePreview(); }));
+  document.getElementById('stack-preset-sel').addEventListener('change', e => {
+    if (e.target.value) stackApplyPreset(e.target.value);
+    e.target.value = '';
+  });
   document.getElementById('anim-t').addEventListener('input', e => {
     previewT = parseInt(e.target.value) / 100;
     document.getElementById('anim-t-val').textContent = previewT <= 0 ? '—' : previewT.toFixed(2);
@@ -2732,8 +2987,10 @@ window.addEventListener('resize', () => {
 initWorker();
 buildUI();
 applyI18n();
+buildStackSelects();
 applyParamsFromURL();
 buildTypeParams(currentType);
+renderStackUI();
 initThumbFolds();
 applyPreviewTab();
 syncCanvasSizes();
