@@ -29,6 +29,11 @@ A procedural game-VFX sprite texture generator. Single self-contained HTML file,
 - **Web Worker 渲染**：生成運算在背景執行緒，拖滑桿與批次匯出 UI 不凍結（不支援環境自動 fallback）
 - **全域 2× 超取樣**：所有特效、所有模式一致抗鋸齒（不再只看賽璐璐開關）
 - **Add / Multiply 成對匯出**：勾選後同時輸出 `_a`（黑底加法版）與 `_m`（白底反轉乘法版），對齊引擎雙貼圖慣例
+- **非方形尺寸**：1:1 / 2:1 / 4:1 比例（trail、beam 貼圖格式），內容自動壓縮拉伸
+- **錨點控制**：中 / 左 / 右 / 上 / 下 —— 內容往邊緣靠（槍口火光靠左、拖尾靠底，配合引擎 pivot）
+- **HDR 匯出**：Radiance `.hdr`（RGBE、線性光），Glow 超過 1 的能量保留，引擎 bloom 有真實餘量
+- **線性空間 ramp 混色**：漸層在線性光插值再轉回 sRGB，亮度均勻無暗帶
+- **manifest.json 參數側錄**：批次 ZIP 內附完整生成參數（可重現、可追溯）
 - 11 種色彩映射：灰階 / **卡通雙色** / **卡通三色** / **自訂雙色（color picker 暗色＋亮色）** / 金 / Plasma / 火焰 / 冰 / 電 / 毒 / 熔岩
 - 背景切換：黑 / 白 / 透明；透明模式帶 **去黑邊修正**（straight-alpha 引擎混合不出暗色 fringing）
 - 後處理鏈：色階、對比、Gamma、亮度、反轉、**Glow 發光（bloom）** + 亮度直方圖 + 一鍵自動色階

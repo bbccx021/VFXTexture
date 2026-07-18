@@ -140,6 +140,20 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
       <details class="section" open>
         <summary class="sec-hdr" data-i18n="sec_res">解析度</summary>
         <div class="radio-row" id="size-row" style="padding-bottom:4px"></div>
+        <div class="radio-row" style="padding-bottom:4px;align-items:center">
+          <span class="sl-lbl" data-i18n="lbl_ratio" style="min-width:44px">比例</span>
+          <label><input type="radio" name="ratio" value="1" checked> 1:1</label>
+          <label><input type="radio" name="ratio" value="2"> 2:1</label>
+          <label><input type="radio" name="ratio" value="4"> 4:1</label>
+        </div>
+        <div class="radio-row" style="padding-bottom:4px;align-items:center">
+          <span class="sl-lbl" data-i18n="lbl_anchor" style="min-width:44px">錨點</span>
+          <label><input type="radio" name="anchor" value="0,0" checked> <span data-i18n="an_c">中</span></label>
+          <label><input type="radio" name="anchor" value="-1,0"> <span data-i18n="an_l">左</span></label>
+          <label><input type="radio" name="anchor" value="1,0"> <span data-i18n="an_r">右</span></label>
+          <label><input type="radio" name="anchor" value="0,-1"> <span data-i18n="an_u">上</span></label>
+          <label><input type="radio" name="anchor" value="0,1"> <span data-i18n="an_d">下</span></label>
+        </div>
       </details>
 
       <details class="section" open>
@@ -310,6 +324,7 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
   <!-- ── Bottom bar ── -->
   <div class="bottom">
     <button class="btn btn-save" data-i18n="btn_save" onclick="saveSingle()">↓ 下載 PNG</button>
+    <button class="btn btn-batch" data-i18n="btn_hdr" onclick="exportHDR()">⬇ HDR</button>
     <button class="btn btn-batch" data-i18n="btn_batch" onclick="batchGenerate()">⊞ 批次 ZIP</button>
     <button class="btn btn-batch" data-i18n="btn_share" onclick="shareURL()">🔗 分享連結</button>
     <div id="status" data-i18n="st_ready">就緒</div>
@@ -339,6 +354,9 @@ const I18N = {
   sec_anim:['動畫 / 序列幀','Animation / Flipbook'], lbl_animt:['時間 t','Time t'], lbl_frames:['幀數','Frames'],
   btn_sheet:['⊞ 匯出 Sheet','⊞ Export Sheet'], btn_frames:['🎞 各幀 ZIP','🎞 Frames ZIP'],
   chk_pair:['同時輸出 Add / Multiply（_a / _m）','Export Add / Multiply pair (_a / _m)'],
+  lbl_ratio:['比例','Ratio'], lbl_anchor:['錨點','Anchor'],
+  an_c:['中','C'], an_l:['左','L'], an_r:['右','R'], an_u:['上','T'], an_d:['下','B'],
+  btn_hdr:['⬇ HDR','⬇ HDR'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
   lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'],
   chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
@@ -1553,9 +1571,17 @@ function collectTypeParams(type) {
 
 function getParams() {
   const tp = collectTypeParams(currentType);
+  const size = parseInt(document.querySelector('input[name=size]:checked')?.value || '512');
+  const ratio = parseInt(document.querySelector('input[name=ratio]:checked')?.value || '1');
+  const anc = (document.querySelector('input[name=anchor]:checked')?.value || '0,0').split(',');
   return {
     type:      currentType,
-    size:      parseInt(document.querySelector('input[name=size]:checked')?.value || '512'),
+    size:      size,
+    ratio:     ratio,
+    width:     size,
+    height:    Math.max(1, Math.round(size / ratio)),
+    anchorX:   parseInt(anc[0]) || 0,
+    anchorY:   parseInt(anc[1]) || 0,
     seed:      parseInt(document.getElementById('seed').value) || 42,
     octaves:   tp.octaves,
     freqScale: tp.freqScale,
@@ -1730,7 +1756,8 @@ function applyGlow(field, size, strength, radiusPx) {
   let a = field.slice(), b = new Float32Array(field.length);
   for (let p = 0; p < 3; p++) { boxBlurH(a, b, size, r); boxBlurV(b, a, size, r); }
   const out = new Float32Array(field.length);
-  for (let i = 0; i < field.length; i++) out[i] = Math.min(1, field[i] + a[i] * strength);
+  // 不截斷 → 保留 >1 的 HDR 餘量（PNG 路徑在上色時 clamp；HDR 匯出保留能量）
+  for (let i = 0; i < field.length; i++) out[i] = field[i] + a[i] * strength;
   return out;
 }
 
@@ -1819,13 +1846,22 @@ const VFX_RAMPS = {
   toxic:    [[0,0,6,0],[0.40,22,82,12],[0.70,82,202,32],[0.88,170,240,70],[1,224,255,150]],
   magma:    [[0,0,0,0],[0.25,62,0,32],[0.50,182,22,10],[0.75,255,92,0],[1,255,232,124]],
 };
+// sRGB ↔ 線性光轉換 — ramp 在線性空間插值（漸層亮度均勻，不再有 sRGB lerp 的暗帶）
+function s2l(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function l2s(c) { return Math.round(255 * (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)); }
+const _rampLinCache = new Map();
 function rampLookup(ramp, g) {
+  let lin = _rampLinCache.get(ramp);
+  if (!lin) {
+    lin = ramp.map(s => [s[0], s2l(s[1]), s2l(s[2]), s2l(s[3])]);
+    _rampLinCache.set(ramp, lin);
+  }
   g = g < 0 ? 0 : g > 1 ? 1 : g;
-  for (let s = 1; s < ramp.length; s++) {
-    if (g <= ramp[s][0]) {
-      const a = ramp[s - 1], b = ramp[s];
+  for (let s = 1; s < lin.length; s++) {
+    if (g <= lin[s][0]) {
+      const a = lin[s - 1], b = lin[s];
       const t = (g - a[0]) / (b[0] - a[0] + 1e-6);
-      return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t];
+      return [l2s(a[1] + (b[1] - a[1]) * t), l2s(a[2] + (b[2] - a[2]) * t), l2s(a[3] + (b[3] - a[3]) * t)];
     }
   }
   const last = ramp[ramp.length - 1]; return [last[1], last[2], last[3]];
@@ -1921,28 +1957,60 @@ function downsampleField(src, big, size) {
   return out;
 }
 
-// 產生最終場（一律 2× 超取樣 → 所有特效品質一致，不看 cel 開關臉色）
-function computeFinal(type, size, octaves, seed, freqScale, p) {
-  const SS = 2, big = size * SS;
+// 一般化盒式降採樣：big×big → outW×outH（各軸整數倍縮減；非方形 = 垂直壓縮拉伸內容）
+function downsampleRect(src, big, outW, outH) {
+  const fx = big / outW, fy = big / outH;
+  const out = new Float32Array(outW * outH), inv = 1 / (fx * fy);
+  for (let y = 0; y < outH; y++) {
+    for (let x = 0; x < outW; x++) {
+      let s = 0;
+      for (let dy = 0; dy < fy; dy++) {
+        const row = (y * fy + dy) * big + x * fx;
+        for (let dx = 0; dx < fx; dx++) s += src[row + dx];
+      }
+      out[y * outW + x] = s * inv;
+    }
+  }
+  return out;
+}
+
+// 錨點平移：內容往邊緣靠（ax/ay ∈ -1..1，位移 22%，空位補 0）
+function shiftField(arr, W, H, ax, ay) {
+  if (!ax && !ay) return arr;
+  const dx = Math.round(ax * W * -0.22), dy = Math.round(ay * H * -0.22);
+  const out = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const sy = y - dy;
+    if (sy < 0 || sy >= H) continue;
+    for (let x = 0; x < W; x++) {
+      const sx = x - dx;
+      if (sx < 0 || sx >= W) continue;
+      out[y * W + x] = arr[sy * W + sx];
+    }
+  }
+  return out;
+}
+
+// 產生最終場（一律 2× 超取樣；支援非方形 W×H 與錨點平移）
+function computeFinal(type, W, H, octaves, seed, freqScale, p) {
+  const SS = 2, big = W * SS;
   const arr = GENERATORS[type](big, octaves, seed, freqScale, p);
   const fin = finalizeField(arr, big, { ...p, seed });
-  return downsampleField(fin, big, size);
+  let out = downsampleRect(fin, big, W, H);
+  if (p && (p.anchorX || p.anchorY)) out = shiftField(out, W, H, p.anchorX, p.anchorY);
+  return out;
 }
 
 // ============================================================
 // Canvas rendering
 // ============================================================
-function arrToImageData(ctx, arr, size, colormap) {
-  const id = ctx.createImageData(size, size);
-  id.data.set(applyColormap(arr, colormap));
-  return id;
-}
-
-function renderToCanvas(canvas, arr, size, colormap) {
+function renderToCanvas(canvas, arr, W, H, colormap) {
   const ctx = canvas.getContext('2d');
   const tmp = document.createElement('canvas');
-  tmp.width = size; tmp.height = size;
-  tmp.getContext('2d').putImageData(arrToImageData(tmp.getContext('2d'), arr, size, colormap), 0, 0);
+  tmp.width = W; tmp.height = H;
+  const id = tmp.getContext('2d').createImageData(W, H);
+  id.data.set(applyColormap(arr, colormap));
+  tmp.getContext('2d').putImageData(id, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
@@ -1963,12 +2031,12 @@ function initWorker() {
       generateShockwave, generateMuzzleFlash, generateSparks, generateGroundCrack, generateCellCrack,
       generateStylizedImpact, generateSplatter, generateInkRing,
       postprocess, celShade, boxBlurH, boxBlurV, applyGlow, celActive, finalizeField,
-      downsampleField, computeFinal];
+      downsampleField, downsampleRect, shiftField, computeFinal];
     const src = fns.map(f => f.toString()).join('\n\n') +
       '\nconst GENERATORS={slash:generateSlash,bolt:generateBolt,crossslash:generateCrossSlash,glint:generateGlint,glow:generateGlow,starglow:generateStarGlow,ringglow:generateRingGlow,anamorph:generateAnamorph,celsmoke:generateCelSmoke,rock:generateRock,flame:generateFlame,shockwave:generateShockwave,muzzleflash:generateMuzzleFlash,sparks:generateSparks,groundcrack:generateGroundCrack,cellcrack:generateCellCrack,stylizedimpact:generateStylizedImpact,splatter:generateSplatter,inkring:generateInkRing};\n' +
       'self.onmessage=function(e){const d=e.data;try{let out;' +
       'if(d.op==="gen"){out=GENERATORS[d.type](d.size,d.octaves,d.seed,d.freq,d.p);}' +
-      'else{out=computeFinal(d.type,d.size,d.octaves,d.seed,d.freq,d.p);}' +
+      'else{out=computeFinal(d.type,d.w,d.h,d.octaves,d.seed,d.freq,d.p);}' +
       'self.postMessage({id:d.id,ok:1,buf:out.buffer},[out.buffer]);}' +
       'catch(err){self.postMessage({id:d.id,ok:0,msg:String(err)});}};';
     fxWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
@@ -1980,16 +2048,17 @@ function initWorker() {
     };
   } catch (e) { fxWorker = null; }   // 環境不支援 → 同步 fallback
 }
-function fxRun(op, type, size, octaves, seed, freq, p) {
+// gen：w 為方形邊長；final：w×h 輸出尺寸
+function fxRun(op, type, w, h, octaves, seed, freq, p) {
   if (!fxWorker) {
     return new Promise(res => setTimeout(() => res(
-      op === 'gen' ? GENERATORS[type](size, octaves, seed, freq, p)
-                   : computeFinal(type, size, octaves, seed, freq, p)), 0));
+      op === 'gen' ? GENERATORS[type](w, octaves, seed, freq, p)
+                   : computeFinal(type, w, h, octaves, seed, freq, p)), 0));
   }
   const id = ++fxJobId;
   return new Promise((res, rej) => {
     fxJobs[id] = { res, rej };
-    fxWorker.postMessage({ id, op, type, size, octaves, seed, freq, p });
+    fxWorker.postMessage({ id, op, type, size: w, w, h, octaves, seed, freq, p });
   });
 }
 
@@ -2010,7 +2079,7 @@ function runPreview() {
   setLive('⬤ …', 'var(--accent)');
   const ap = animApply(p, previewT);                       // 動畫 t 演化
   const myId = ++previewGenId;
-  fxRun('gen', ap.type, PREVIEW_CALC * PREVIEW_SS, ap.octaves, ap.seed, ap.freqScale, ap)
+  fxRun('gen', ap.type, PREVIEW_CALC * PREVIEW_SS, 0, ap.octaves, ap.seed, ap.freqScale, ap)
     .then(arr => {
       if (myId !== previewGenId) return;                   // 已有更新的請求
       lastArr = arr;
@@ -2026,15 +2095,22 @@ function runPreview() {
     });
 }
 
+let lastOutW = PREVIEW_CALC, lastOutH = PREVIEW_CALC;
 function renderTilePreview() {
   if (!lastArr) return;
   const p = getParams();
   p.fade = lastFade;
   const big = PREVIEW_CALC * PREVIEW_SS;
-  const finBig = finalizeField(lastArr, big, p);          // cel 在 2× 空間處理
-  const out = downsampleField(finBig, big, PREVIEW_CALC);  // 降採樣補回邊緣 AA
-  lastOut = out;
-  renderToCanvas(document.getElementById('preview'), out, PREVIEW_CALC, p.colormap);
+  const finBig = finalizeField(lastArr, big, p);           // cel 在 2× 空間處理
+  const pw = PREVIEW_CALC, ph = Math.max(1, Math.round(PREVIEW_CALC / p.ratio));
+  let out = downsampleRect(finBig, big, pw, ph);           // 降採樣（含非方形壓縮）
+  if (p.anchorX || p.anchorY) out = shiftField(out, pw, ph, p.anchorX, p.anchorY);
+  lastOut = out; lastOutW = pw; lastOutH = ph;
+  const cv = document.getElementById('preview');
+  cv.style.aspectRatio = String(p.ratio);
+  const cw = cv.offsetWidth || cv.width;
+  if (cw > 0) { cv.width = cw; cv.height = Math.max(1, Math.round(cw / p.ratio)); }
+  renderToCanvas(cv, out, pw, ph, p.colormap);
   renderDissolve();
   renderHistogram();
 }
@@ -2047,13 +2123,13 @@ function renderDissolve() {
   const canvas = document.getElementById('dissolve-canvas');
   const tVal = parseInt(document.getElementById('dissolve-t').value) / 100;
   const edge = 0.06;
-  const n = PREVIEW_CALC;
+  const W = lastOutW, H = lastOutH;
   const off = document.createElement('canvas');
-  off.width = n; off.height = n;
+  off.width = W; off.height = H;
   const ctx = off.getContext('2d');
-  const id = ctx.createImageData(n, n);
+  const id = ctx.createImageData(W, H);
   const d = id.data;
-  for (let i = 0; i < n * n; i++) {
+  for (let i = 0; i < W * H; i++) {
     const v = lastOut[i];
     const o = i * 4;
     if (v < tVal) {
@@ -2100,16 +2176,6 @@ function renderHistogram() {
 // ============================================================
 // Export
 // ============================================================
-function arrToExportCanvas(arr, size, colormap) {
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const id = ctx.createImageData(size, size);
-  id.data.set(applyColormap(arr, colormap));
-  ctx.putImageData(id, 0, 0);
-  return canvas;
-}
-
 function canvasToBlob(canvas) {
   return new Promise(res => canvas.toBlob(res, 'image/png'));
 }
@@ -2123,29 +2189,62 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function rgbaToCanvas(rgba, size) {
+function rgbaToCanvas(rgba, W, H) {
   const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
+  canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const id = ctx.createImageData(size, size);
+  const id = ctx.createImageData(W, H);
   id.data.set(rgba);
   ctx.putImageData(id, 0, 0);
   return canvas;
 }
 
 // 匯出一張（含 _a/_m 成對）：回傳 [{name, blob}]
-async function exportOne(field, size, colormap, baseName, pair) {
+async function exportOne(field, W, H, colormap, baseName, pair) {
   const files = [];
   if (pair) {
     files.push({ name: baseName + '_a.png',
-      blob: await canvasToBlob(rgbaToCanvas(applyColormap(field, colormap, 'black'), size)) });
+      blob: await canvasToBlob(rgbaToCanvas(applyColormap(field, colormap, 'black'), W, H)) });
     files.push({ name: baseName + '_m.png',
-      blob: await canvasToBlob(rgbaToCanvas(multiplyRGBA(field), size)) });
+      blob: await canvasToBlob(rgbaToCanvas(multiplyRGBA(field), W, H)) });
   } else {
     files.push({ name: baseName + '.png',
-      blob: await canvasToBlob(arrToExportCanvas(field, size, colormap)) });
+      blob: await canvasToBlob(rgbaToCanvas(applyColormap(field, colormap), W, H)) });
   }
   return files;
+}
+
+// Radiance HDR（.hdr, RGBE 無壓縮）— 線性光輸出，Glow 超過 1 的能量保留（引擎 bloom 有餘量）
+async function exportHDR() {
+  if (isGenerating) return;
+  const p = getParams();
+  isGenerating = true;
+  setStatus('HDR…', 'var(--blue)');
+  try {
+    const ap = animApply(p, previewT);
+    const W = p.width, H = p.height;
+    const out = await fxRun('final', ap.type, W, H, ap.octaves, ap.seed, ap.freqScale, ap);
+    const custom = p.colormap === 'custom' ? getCustomColors() : null;
+    const bytes = new Uint8Array(W * H * 4);
+    for (let i = 0; i < W * H; i++) {
+      const v = out[i];
+      const c = colorAt(p.colormap, Math.min(1, v), custom);
+      const boost = Math.max(1, v);                          // >1 的 glow 能量進 HDR
+      const r = s2l(c[0]) * boost, g = s2l(c[1]) * boost, b = s2l(c[2]) * boost;
+      const m = Math.max(r, g, b), o = i * 4;
+      if (m < 1e-32) { bytes[o] = bytes[o+1] = bytes[o+2] = bytes[o+3] = 0; continue; }
+      const e = Math.floor(Math.log2(m)) + 1;
+      const scale = 256 / Math.pow(2, e);
+      bytes[o] = Math.min(255, r * scale); bytes[o+1] = Math.min(255, g * scale);
+      bytes[o+2] = Math.min(255, b * scale); bytes[o+3] = e + 128;
+    }
+    const header = `#?RADIANCE\n# FX Sprite Lab\nFORMAT=32-bit_rle_rgbe\n\n-Y ${H} +X ${W}\n`;
+    const blob = new Blob([header, bytes], { type: 'image/vnd.radiance' });
+    const name = `${p.type}_${W}x${H}_${String(p.seed).padStart(4,'0')}.hdr`;
+    downloadBlob(blob, name);
+    setStatus(`✅ ${name}`, 'var(--green)');
+  } catch(e) { setStatus(`⚠ ${e.message}`, 'var(--red)'); }
+  isGenerating = false;
 }
 
 async function saveSingle() {
@@ -2155,9 +2254,9 @@ async function saveSingle() {
   setStatus('…', 'var(--blue)');
   try {
     const ap = animApply(p, previewT);
-    const base = `${p.type}_${p.size}_${String(p.seed).padStart(4,'0')}`;
-    const out = await fxRun('final', ap.type, p.size, ap.octaves, ap.seed, ap.freqScale, ap);
-    const files = await exportOne(out, p.size, p.colormap, base, p.pairAM);
+    const base = `${p.type}_${p.width}x${p.height}_${String(p.seed).padStart(4,'0')}`;
+    const out = await fxRun('final', ap.type, p.width, p.height, ap.octaves, ap.seed, ap.freqScale, ap);
+    const files = await exportOne(out, p.width, p.height, p.colormap, base, p.pairAM);
     files.forEach(f => downloadBlob(f.blob, f.name));
     setStatus(`✅ ${files.map(f => f.name).join(' + ')}`, 'var(--green)');
   } catch(e) {
@@ -2176,28 +2275,35 @@ async function batchGenerate() {
   const zip = typeof JSZip !== 'undefined' ? new JSZip() : null;
   setStatus(`0/${total}`, 'var(--blue)');
   setProgress(0);
+  const manifest = { tool: 'FX Sprite Lab', size: `${p.width}x${p.height}`, colormap: p.colormap,
+    post: { gamma: p.gamma, contrast: p.contrast, levLo: p.levLo, levHi: p.levHi, invert: p.invert,
+            glowStr: p.glowStr, glowRad: p.glowRad,
+            cel: { levels: p.celLevels, outline: p.celOutline, silh: p.celSilh, rough: p.celRough } },
+    items: [] };
   for (const type of types) {
     const tp = collectTypeParams(type);                    // 各型用自己的 schema 參數
     for (let i = 0; i < p.count; i++) {
       const seed = p.seed + i;
-      const base = `${type}_${p.size}_${String(seed).padStart(4,'0')}`;
+      const base = `${type}_${p.width}x${p.height}_${String(seed).padStart(4,'0')}`;
       setStatus(`${done+1}/${total}  ${base}`, 'var(--blue)');
       setProgress(done / total * 100);
       try {
         const tParams = { ...p, type, octaves: tp.octaves, freqScale: tp.freqScale,
           holeN: tp.holeN !== undefined ? tp.holeN : p.holeN,
           holeSize: tp.holeSize !== undefined ? tp.holeSize : p.holeSize, seed };
-        const out = await fxRun('final', type, p.size, tp.octaves, seed, tp.freqScale, tParams);
-        const files = await exportOne(out, p.size, p.colormap, base, p.pairAM);
+        const out = await fxRun('final', type, p.width, p.height, tp.octaves, seed, tp.freqScale, tParams);
+        const files = await exportOne(out, p.width, p.height, p.colormap, base, p.pairAM);
         for (const f of files) { if (zip) zip.file(f.name, f.blob); else downloadBlob(f.blob, f.name); }
+        manifest.items.push({ file: base, type, seed, params: { ...getTypeValues(type) } });
       } catch(e) { console.error(e); }
       done++;
     }
   }
   if (zip) {
+    zip.file('manifest.json', JSON.stringify(manifest, null, 2));   // 參數側錄（可重現）
     setStatus('ZIP…', 'var(--blue)');
     const blob = await zip.generateAsync({ type: 'blob' });
-    downloadBlob(blob, `fxsprite_${p.size}_${Date.now()}.zip`);
+    downloadBlob(blob, `fxsprite_${p.width}x${p.height}_${Date.now()}.zip`);
   }
   setProgress(100);
   setStatus(`✅ ${total}`, 'var(--green)');
@@ -2217,7 +2323,7 @@ async function renderFrameFields(p, n, onEach) {
     setStatus(`${f+1}/${n}`, 'var(--blue)');
     setProgress(f / n * 100);
     const ap = animApply(p, tt, true);                     // t=0 也套演化（動畫起點）
-    const out = await fxRun('final', ap.type, p.size, ap.octaves, ap.seed, ap.freqScale, ap);
+    const out = await fxRun('final', ap.type, p.width, p.height, ap.octaves, ap.seed, ap.freqScale, ap);
     await onEach(out, f, tt);
   }
 }
@@ -2229,14 +2335,14 @@ async function exportSheet() {
   const n = frameCount();
   const cols = n <= 4 ? 2 : 4, rows = Math.ceil(n / cols);
   const sheet = document.createElement('canvas');
-  sheet.width = cols * p.size; sheet.height = rows * p.size;
+  sheet.width = cols * p.width; sheet.height = rows * p.height;
   const ctx = sheet.getContext('2d');
   try {
     await renderFrameFields(p, n, async (out, f) => {
-      ctx.drawImage(arrToExportCanvas(out, p.size, p.colormap), (f % cols) * p.size, Math.floor(f / cols) * p.size);
+      ctx.drawImage(rgbaToCanvas(applyColormap(out, p.colormap), p.width, p.height), (f % cols) * p.width, Math.floor(f / cols) * p.height);
     });
     const blob = await canvasToBlob(sheet);
-    downloadBlob(blob, `${p.type}_sheet${cols}x${rows}_${p.size}_${String(p.seed).padStart(4,'0')}.png`);
+    downloadBlob(blob, `${p.type}_sheet${cols}x${rows}_${p.width}x${p.height}_${String(p.seed).padStart(4,'0')}.png`);
     setStatus(`✅ sheet ${cols}×${rows}`, 'var(--green)');
   } catch(e) { setStatus(`⚠ ${e.message}`, 'var(--red)'); }
   setProgress(100);
@@ -2251,13 +2357,13 @@ async function exportFrames() {
   const zip = typeof JSZip !== 'undefined' ? new JSZip() : null;
   try {
     await renderFrameFields(p, n, async (out, f) => {
-      const base = `${p.type}_${p.size}_${String(p.seed).padStart(4,'0')}_f${String(f).padStart(2,'0')}`;
-      const files = await exportOne(out, p.size, p.colormap, base, p.pairAM);
+      const base = `${p.type}_${p.width}x${p.height}_${String(p.seed).padStart(4,'0')}_f${String(f).padStart(2,'0')}`;
+      const files = await exportOne(out, p.width, p.height, p.colormap, base, p.pairAM);
       for (const fl of files) { if (zip) zip.file(fl.name, fl.blob); else downloadBlob(fl.blob, fl.name); }
     });
     if (zip) {
       const blob = await zip.generateAsync({ type: 'blob' });
-      downloadBlob(blob, `${p.type}_anim_${p.size}.zip`);
+      downloadBlob(blob, `${p.type}_anim_${p.width}x${p.height}.zip`);
     }
     setStatus(`✅ ${n} 幀`, 'var(--green)');
   } catch(e) { setStatus(`⚠ ${e.message}`, 'var(--red)'); }
@@ -2424,6 +2530,8 @@ function buildUI() {
   buildCmapRadios();
 
   // Slider listeners
+  document.querySelectorAll('input[name=ratio],input[name=anchor]').forEach(r =>
+    r.addEventListener('change', () => { updateResInfo(); if (lastArr) renderTilePreview(); }));
   document.getElementById('anim-t').addEventListener('input', e => {
     previewT = parseInt(e.target.value) / 100;
     document.getElementById('anim-t-val').textContent = previewT <= 0 ? '—' : previewT.toFixed(2);
@@ -2521,7 +2629,7 @@ function selectType(key) {
 function updateResInfo() {
   const p = getParams();
   const el = document.getElementById('res-info');
-  if (el) el.textContent = p.type + ' · ' + p.size + 'px · seed ' + p.seed;
+  if (el) el.textContent = p.type + ' · ' + p.width + '×' + p.height + ' · seed ' + p.seed;
 }
 
 // ============================================================
@@ -2538,12 +2646,14 @@ document.addEventListener('keydown', e => {
 // Canvas size sync + mobile preview tabs
 // ============================================================
 function syncCanvasSizes() {
+  const ratio = parseInt(document.querySelector('input[name=ratio]:checked')?.value || '1');
   ['preview','dissolve-canvas'].forEach(id => {
     const c = document.getElementById(id);
     const w = c.offsetWidth;
-    if (w > 0 && (c.width !== w || c.height !== w)) {
+    const h = id === 'preview' ? Math.max(1, Math.round(w / ratio)) : w;
+    if (w > 0 && (c.width !== w || c.height !== h)) {
       c.width = w;
-      c.height = w;
+      c.height = h;
     }
   });
 }
