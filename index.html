@@ -184,6 +184,11 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
       <details class="section" open>
         <summary class="sec-hdr" data-i18n="sec_param">參數調整</summary>
         <div id="type-params"></div>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_rot">旋轉</span>
+          <input type="range" id="fx-rot" min="0" max="355" value="0" step="5">
+          <span class="sl-val" id="fx-rot-val">0°</span>
+        </div>
         <div class="radio-row" id="cmap-row" style="padding:4px 0 6px"></div>
         <div class="chk-row" id="custom-color-row" style="gap:8px;padding:0 0 6px;align-items:center">
           <span class="sl-lbl" data-i18n="lbl_cols" style="min-width:44px">自訂色</span>
@@ -403,6 +408,7 @@ const I18N = {
   sec_cel:['卡通風格','Toon Style'],
   style_none:['無','None'], style_cel:['賽璐璐','Cel'],
   lbl_bands:['色塊階數','Bands'], lbl_outline:['描邊','Outline'], lbl_silh:['外框線','Silhouette'], lbl_rough:['邊緣抖動','Rough'],
+  lbl_rot:['旋轉','Rotation'], adv_more:['進階','Advanced'],
   adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
   lbl_contrast:['對比','Contrast'],
   sec_anim:['動畫 / 序列幀','Animation / Flipbook'], lbl_animt:['時間 t','Time t'], lbl_frames:['幀數','Frames'],
@@ -558,7 +564,10 @@ function segDist(px, py, ax, ay, bx, by) {
 // ============================================================
 // Generators — 8 種特效 sprite
 // ============================================================
-function generateSlash(size, octaves, seed, freqScale) {
+function generateSlash(size, octaves, seed, freqScale, p) {
+  const crW = p && p.slCrW ? p.slCrW : 1;                  // 月牙粗細
+  const arcF = p && p.slArc ? p.slArc : 1;                 // 弧長
+  const rIn = 0.36 - 0.16 * crW, rOut = 0.36 + 0.16 * crW;
   const base = fbm(size, octaves, 4, 2.0, 0.5, seed, 1);
   const N = size * size;
   const rows = new Float32Array(N), cols = new Float32Array(N);
@@ -582,8 +591,8 @@ function generateSlash(size, octaves, seed, freqScale) {
       const idx = j * size + i;
       const r = Math.sqrt(dx * dx + dy * dy);
       const a = Math.abs(Math.atan2(dy, dx));
-      const band = sstep(0.20, 0.30, r) * (1 - sstep(0.42, 0.52, r));
-      const arcT = 1 - sstep(1.3, 2.5, a);
+      const band = sstep(rIn, rIn + 0.10, r) * (1 - sstep(rOut - 0.10, rOut, r));
+      const arcT = 1 - sstep(1.3 * arcF, 2.5 * arcF, a);
       const edgeB = sstep(0.30, 0.45, r);                   // 外緣較利較亮
       const v = band * arcT * (0.35 + edgeB * 1.1) * (0.5 + str[idx] * 0.9);
       out[idx] = Math.max(0, Math.min(1, v));
@@ -592,7 +601,8 @@ function generateSlash(size, octaves, seed, freqScale) {
   return out;
 }
 
-function generateBolt(size, octaves, seed, freqScale) {
+function generateBolt(size, octaves, seed, freqScale, p) {
+  const jagV = p && p.btJag ? p.btJag : 1;                 // 狂野度
   const rng = new RNG(seed);
   const segs = [];
   const wBase = 0.0075 / Math.max(0.5, freqScale);
@@ -626,7 +636,7 @@ function generateBolt(size, octaves, seed, freqScale) {
   }
   const xTop = 0.5 + (rng.rand() - 0.5) * 0.10;
   const xBot = 0.5 + (rng.rand() - 0.5) * 0.16;
-  const main = fractalPath(xTop, 0.02, xBot, 0.98, 5, 0.5);
+  const main = fractalPath(xTop, 0.02, xBot, 0.98, 5, 0.5 * jagV);
   addBolt(main, wBase, wBase * 0.45, 1.0, 0.85);
   const nBr = 2 + Math.floor(rng.rand() * 2) + Math.round(octaves / 8);
   for (let b = 0; b < nBr; b++) {
@@ -635,14 +645,14 @@ function generateBolt(size, octaves, seed, freqScale) {
     const dir = rng.rand() < 0.5 ? -1 : 1;
     const ex = p.x + dir * (0.08 + rng.rand() * 0.16);
     const ey = Math.min(0.99, p.y + 0.12 + rng.rand() * 0.18);
-    const bp = fractalPath(p.x, p.y, ex, ey, 4, 0.45);
+    const bp = fractalPath(p.x, p.y, ex, ey, 4, 0.45 * jagV);
     addBolt(bp, wBase * 0.45, wBase * 0.08, 0.5, 0.08);
     if (rng.rand() > 0.6) {
       const spi = 2 + Math.floor(rng.rand() * (bp.length - 4));
       const sp = bp[spi];
       const sp2 = fractalPath(sp.x, sp.y,
         sp.x + dir * (0.06 + rng.rand() * 0.12),
-        Math.min(0.99, sp.y + 0.10 + rng.rand() * 0.12), 3, 0.45);
+        Math.min(0.99, sp.y + 0.10 + rng.rand() * 0.12), 3, 0.45 * jagV);
       addBolt(sp2, wBase * 0.25, wBase * 0.05, 0.4, 0.06);
     }
   }
@@ -677,14 +687,15 @@ function generateBolt(size, octaves, seed, freqScale) {
   return out;
 }
 
-function generateCrossSlash(size, octaves, seed, freqScale) {
+function generateCrossSlash(size, octaves, seed, freqScale, p) {
+  const lwV = p && p.csLw ? p.csLw : 1;                    // 線寬
   const rng = new RNG((seed * 2654435761) >>> 0 || 1); rng.next();
   const k = Math.max(0.5, Math.min(1.4, freqScale));
   const rot = rng.rand() * Math.PI;
   const angles = [rot + 0.55 + (rng.rand() - 0.5) * 0.25, rot - 0.75 + (rng.rand() - 0.5) * 0.25];
   if (octaves >= 11) angles.push(rot + 1.55 + (rng.rand() - 0.5) * 0.3);
   const lens = angles.map(() => (0.36 + rng.rand() * 0.10) * k);
-  const wids = angles.map(() => 0.030 + rng.rand() * 0.014);
+  const wids = angles.map(() => (0.030 + rng.rand() * 0.014) * lwV);
   const brs  = angles.map(() => 0.85 + rng.rand() * 0.15);
   const cosA = angles.map(Math.cos), sinA = angles.map(Math.sin);
   const out = new Float32Array(size * size);
@@ -709,7 +720,8 @@ function generateCrossSlash(size, octaves, seed, freqScale) {
   return out;
 }
 
-function generateGlint(size, octaves, seed, freqScale) {
+function generateGlint(size, octaves, seed, freqScale, p) {
+  const lenV = p && p.giLen ? p.giLen : 1;                 // 光芒長度
   const k = 1 / Math.max(0.25, freqScale);
   const k2 = k * k;
   const diagW = Math.max(0, Math.min(1, (octaves - 4) / 6));
@@ -719,8 +731,8 @@ function generateGlint(size, octaves, seed, freqScale) {
     for (let i = 0; i < size; i++) {
       const dx = i / size - 0.5;
       const r2 = dx * dx + dy * dy;
-      const h = Math.exp(-(dy * dy) / (0.00002 * k2)) * Math.exp(-(dx * dx) / (0.05 * k2));
-      const ve = Math.exp(-(dx * dx) / (0.00002 * k2)) * Math.exp(-(dy * dy) / (0.05 * k2));
+      const h = Math.exp(-(dy * dy) / (0.00002 * k2)) * Math.exp(-(dx * dx) / (0.05 * k2 * lenV * lenV));
+      const ve = Math.exp(-(dx * dx) / (0.00002 * k2)) * Math.exp(-(dy * dy) / (0.05 * k2 * lenV * lenV));
       const d1 = (dx - dy) * 0.7071, d2 = (dx + dy) * 0.7071;
       const di = (Math.exp(-(d1 * d1) / (0.00001 * k2)) + Math.exp(-(d2 * d2) / (0.00001 * k2)))
                * Math.exp(-r2 / (0.012 * k2)) * 0.5 * diagW;
@@ -730,11 +742,12 @@ function generateGlint(size, octaves, seed, freqScale) {
   return out;
 }
 
-function generateGlow(size, octaves, seed, freqScale) {
+function generateGlow(size, octaves, seed, freqScale, p) {
+  const haloV = p && p.glHalo != null ? p.glHalo : 1;      // 光暈比例
   const k = 1 / Math.max(0.25, freqScale);
   const sCore = 0.018 * k * k;
   const sHalo = sCore * 5;
-  const haloW = 0.12 + octaves * 0.02;
+  const haloW = (0.12 + octaves * 0.02) * haloV;
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
     const dy = j / size - 0.5;
@@ -747,7 +760,8 @@ function generateGlow(size, octaves, seed, freqScale) {
   return out;
 }
 
-function generateStarGlow(size, octaves, seed, freqScale) {
+function generateStarGlow(size, octaves, seed, freqScale, p) {
+  const shV = p && p.sgSharp ? p.sgSharp : 1;              // 星芒銳度
   const k = 1 / Math.max(0.25, freqScale);
   const sCore = 0.012 * k * k;
   const rays = octaves < 6 ? 4 : (octaves < 10 ? 6 : 8);   // octaves 控制芒數
@@ -766,8 +780,8 @@ function generateStarGlow(size, octaves, seed, freqScale) {
       const r2 = dx * dx + dy * dy;
       const r = Math.sqrt(r2);
       const a = Math.atan2(dy, dx) + rot;
-      const ray = Math.pow(Math.abs(Math.cos(rays / 2 * a)), 22) * Math.exp(-r / (0.16 * k));
-      const sub = Math.pow(Math.abs(Math.cos(rays / 2 * a + Math.PI / rays)), 44) * Math.exp(-r / (0.10 * k)) * 0.45;
+      const ray = Math.pow(Math.abs(Math.cos(rays / 2 * a)), 22 * shV) * Math.exp(-r / (0.16 * k));
+      const sub = Math.pow(Math.abs(Math.cos(rays / 2 * a + Math.PI / rays)), 44 * shV) * Math.exp(-r / (0.10 * k)) * 0.45;
       let ghost = 0;
       for (let g = 0; g < ghosts.length; g++) {
         const gx = Math.cos(ga) * ghosts[g].d, gy = Math.sin(ga) * ghosts[g].d;
@@ -781,7 +795,9 @@ function generateStarGlow(size, octaves, seed, freqScale) {
   return out;
 }
 
-function generateRingGlow(size, octaves, seed, freqScale) {
+function generateRingGlow(size, octaves, seed, freqScale, p) {
+  const lwV = p && p.rgLw ? p.rgLw : 1;                    // 環線粗細
+  const lw2 = lwV * lwV;
   const r0 = 0.30 * Math.max(0.4, Math.min(1.3, freqScale));
   const haloW = 0.10 + octaves * 0.025;
   const out = new Float32Array(size * size);
@@ -792,14 +808,16 @@ function generateRingGlow(size, octaves, seed, freqScale) {
       const r2 = dx * dx + dy * dy;
       const r = Math.sqrt(r2);
       const d = r - r0;
-      const v = Math.exp(-(d * d) / 0.0004) + Math.exp(-(d * d) / 0.006) * (0.25 + haloW) + Math.exp(-r2 / 0.002) * 0.3;
+      const v = Math.exp(-(d * d) / (0.0004 * lw2)) + Math.exp(-(d * d) / (0.006 * lw2)) * (0.25 + haloW) + Math.exp(-r2 / 0.002) * 0.3;
       out[j * size + i] = Math.min(1, v);
     }
   }
   return out;
 }
 
-function generateAnamorph(size, octaves, seed, freqScale) {
+function generateAnamorph(size, octaves, seed, freqScale, p) {
+  const thV = p && p.anTh ? p.anTh : 1;                    // 厚度
+  const th2 = thV * thV;
   const k = 1 / Math.max(0.25, freqScale);
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
@@ -807,8 +825,8 @@ function generateAnamorph(size, octaves, seed, freqScale) {
     for (let i = 0; i < size; i++) {
       const dx = i / size - 0.5;
       const r2 = dx * dx + dy * dy;
-      const streak = Math.exp(-(dy * dy) / (0.0009 * k * k)) * Math.exp(-(dx * dx) / (0.055 * k * k));
-      const thin   = Math.exp(-(dy * dy) / (0.00012 * k * k)) * Math.exp(-(dx * dx) / (0.10 * k * k)) * 0.6;
+      const streak = Math.exp(-(dy * dy) / (0.0009 * k * k * th2)) * Math.exp(-(dx * dx) / (0.055 * k * k));
+      const thin   = Math.exp(-(dy * dy) / (0.00012 * k * k * th2)) * Math.exp(-(dx * dx) / (0.10 * k * k)) * 0.6;
       const core   = Math.exp(-r2 / (0.0035 * k * k)) * 0.75;
       out[j * size + i] = Math.min(1, streak + thin + core);
     }
@@ -894,6 +912,26 @@ function warpField(field, size, amp, freq, seed) {
   return out;
 }
 
+// Rotate：繞中心雙線性旋轉（出界補 0）
+function rotateField(field, size, deg) {
+  const ang = (deg || 0) * Math.PI / 180;
+  if (!ang) return field;
+  const ca = Math.cos(-ang), sa = Math.sin(-ang), h = (size - 1) / 2;
+  const o = new Float32Array(field.length);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const rx = x - h, ry = y - h;
+      const sx = rx * ca - ry * sa + h, sy = rx * sa + ry * ca + h;
+      if (sx < 0 || sy < 0 || sx > size - 1.001 || sy > size - 1.001) continue;
+      const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0;
+      const r0 = y0 * size + x0;
+      o[y * size + x] = field[r0] * (1 - fx) * (1 - fy) + field[r0 + 1] * fx * (1 - fy)
+                      + field[r0 + size] * (1 - fx) * fy + field[r0 + size + 1] * fx * fy;
+    }
+  }
+  return o;
+}
+
 // Blur op：盒式模糊 ×3（半徑隨解析度縮放）
 function blurOp(field, size, radPx) {
   const r = Math.max(1, Math.round(radPx * size / 256));
@@ -961,34 +999,21 @@ function evalStack(size, p) {
       }
       field = o;
     } else if (L.op === 'rotate') {
-      const ang = (L.ang || 0) * Math.PI / 180;
-      const ca = Math.cos(-ang), sa = Math.sin(-ang), h = (size - 1) / 2;
-      const o = new Float32Array(field.length);
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const rx = x - h, ry = y - h;
-          const sx = rx * ca - ry * sa + h, sy = rx * sa + ry * ca + h;
-          if (sx < 0 || sy < 0 || sx > size - 1.001 || sy > size - 1.001) continue;
-          const x0 = sx | 0, y0 = sy | 0, fx = sx - x0, fy = sy - y0;
-          const r0 = y0 * size + x0;
-          o[y * size + x] = field[r0] * (1 - fx) * (1 - fy) + field[r0 + 1] * fx * (1 - fy)
-                          + field[r0 + size] * (1 - fx) * fy + field[r0 + size + 1] * fx * fy;
-        }
-      }
-      field = o;
+      field = rotateField(field, size, L.ang || 0);
     }
   }
+  if (p.rot) field = rotateField(field, size, p.rot);      // 通用旋轉（所有特效）
   return field;
 }
 
 // 共用：一組球體 → 兩色調卡通雲場（holes 為可選負空間缺口，洞緣自帶陰影圈）
 // 用「平滑聯集高度場的表面法線」上色 → 頂部受光、下緣與球間谷地入陰影，
 // 陰影分布如真實雲團（頂亮、底暗、縫隙暗），且平滑不鋸齒
-function renderCloud(size, blobs, seed, la, wAmp, holes) {
+function renderCloud(size, blobs, seed, la, wAmp, holes, termIn) {
   const Lz = 0.58;                                           // 光源前傾量，決定終端線高度
   const Ln = Math.hypot(Math.cos(la), Math.sin(la), Lz) || 1;
   const l3x = Math.cos(la) / Ln, l3y = Math.sin(la) / Ln, l3z = Lz / Ln;
-  const term = 0.30, aa = 0.07;                              // 終端線閾值 / 柔邊寬度
+  const term = termIn == null ? 0.30 : termIn, aa = 0.07;    // 終端線閾值 / 柔邊寬度
   const kS = 0.035;                                          // 谷地融合半徑（接觸陰影柔度）
   const wobX = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9e37) >>> 0, 1);   // 邊緣手繪抖動
   const wobY = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51ab) >>> 0, 1);
@@ -1036,7 +1061,7 @@ function renderCloud(size, blobs, seed, la, wAmp, holes) {
   return out;
 }
 
-function generateCelSmoke(size, octaves, seed, freqScale) {
+function generateCelSmoke(size, octaves, seed, freqScale, p) {
   const rng = new RNG((seed * 1013904223 + 7) >>> 0 || 1);
   const k = Math.max(0.02, Math.min(1.6, freqScale));
   const nBlobs = Math.min(9, 3 + Math.round(octaves / 2));   // octaves 控制團塊數
@@ -1049,13 +1074,17 @@ function generateCelSmoke(size, octaves, seed, freqScale) {
     const up = 1 - (y - 0.3) / 0.5;                          // 越上面的球越小
     blobs.push({ x, y, r: Math.max(0.06 * k, (0.09 + rng.rand() * 0.09) * k * (0.8 + 0.4 * up)) });
   }
-  const la = -1.95 + (rng.rand() - 0.5) * 0.3;               // 光源：偏上、微左（參考圖分布）
-  return renderCloud(size, blobs, seed, la, 0.032);
+  // 陰影量 / 邊緣抖動 / 光源角 — 卡通煙的風格核心參數
+  const term = 0.06 + (p && p.smShade != null ? p.smShade : 50) / 100 * 0.48;
+  const wAmp = (p && p.smWob != null ? p.smWob : 40) / 100 * 0.08;
+  const la = -1.95 + (rng.rand() - 0.5) * 0.3 + (p && p.smLight ? p.smLight : 0) * Math.PI / 180;
+  return renderCloud(size, blobs, seed, la, wAmp, undefined, term);
 }
 
 // 程序化石頭：有稜有角的巨石輪廓 + 三調卡通面（頂亮 / 中 / 底暗），底部略平坐地
 // 搭配 cel3 調色最佳
-function generateRock(size, octaves, seed, freqScale) {
+function generateRock(size, octaves, seed, freqScale, p) {
+  const flatV = p && p.rkFlat ? p.rkFlat : 0.66;           // 坐地高度
   const rng = new RNG((seed * 374761393 + 5) >>> 0 || 1); rng.next();
   const k = Math.max(0.02, Math.min(1.5, freqScale));
   const cx = 0.5, cy = 0.50, R0 = 0.30 * k, aspect = 1.20;   // 偏寬
@@ -1067,7 +1096,7 @@ function generateRock(size, octaves, seed, freqScale) {
   const l3x = Math.cos(la) / Ln, l3y = Math.sin(la) / Ln, l3z = Lz / Ln;
   const t1 = 0.10, t2 = 0.52;                                // 三調終端線
   const wob = fbm(size, 4, 5, 2, 0.5, (seed ^ 0x77) >>> 0, 1);
-  const groundY = cy + R0 * 0.66;                            // 底部裁平
+  const groundY = cy + R0 * flatV;                           // 底部裁平
   const eAA = 0.02 * k;
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
@@ -1096,7 +1125,9 @@ function generateFlame(size, octaves, seed, freqScale, p) {
   const rng = new RNG((seed * 2654435761 + 23) >>> 0 || 1); rng.next();
   const k = Math.max(0.02, Math.min(1.6, freqScale));
   const cx = 0.5 + (rng.rand() - 0.5) * 0.02;
-  const dir = rng.rand() < 0.5 ? -1 : 1;
+  const rDir = rng.rand();                                 // 恆定消耗 rng → 參數不影響本體形狀
+  const bendP = p && p.flBend ? p.flBend : 0;
+  const dir = bendP !== 0 ? (bendP > 0 ? 1 : -1) : (rDir < 0.5 ? -1 : 1);
   const blobs = [];
   // 寬圓潤底座（微壓扁）+ 多瓣中段 → 火焰身體由下往上自然收窄
   blobs.push({ x: cx, y: 0.70, r: 0.155 * k });
@@ -1107,7 +1138,8 @@ function generateFlame(size, octaves, seed, freqScale, p) {
   // 主火舌：從身體寬度平滑收尖（起始大、縮得慢、強重疊 → 不會「球+角」突兀）
   const nT = 4 + Math.round(octaves / 4);
   let px = cx + dir * 0.02, py = 0.52, pr = 0.105 * k;
-  const bend = dir * (0.12 + rng.rand() * 0.20);
+  const rBend = rng.rand();
+  const bend = dir * (bendP !== 0 ? 0.10 + Math.abs(bendP) / 100 * 0.28 : 0.12 + rBend * 0.20);
   let ang = -Math.PI / 2;
   for (let t = 0; t < nT; t++) {
     blobs.push({ x: px, y: py, r: pr });
@@ -1138,9 +1170,10 @@ function generateFlame(size, octaves, seed, freqScale, p) {
       r: (0.017 + hrng.rand() * 0.015) * hSize * k,
     });
   }
-  // 內焰：外焰縮小 62%、錨定底部中心 → 自帶火舌尖的亮部（經典卡通兩層火，非煙團打光）
+  // 內焰：外焰縮小、錨定底部中心 → 自帶火舌尖的亮部（大小可調，預設 62%）
+  const coreV = (p && p.flCore ? p.flCore : 62) / 100;
   const ax = cx, ay = 0.76;
-  const core = blobs.map(b => ({ x: ax + (b.x - ax) * 0.62, y: ay + (b.y - ay) * 0.62, r: b.r * 0.55 }));
+  const core = blobs.map(b => ({ x: ax + (b.x - ax) * coreV, y: ay + (b.y - ay) * coreV, r: b.r * coreV * 0.887 }));
   const wobX = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x9e37) >>> 0, 1);
   const wobY = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51ab) >>> 0, 1);
   function hitN(list, qx, qy) {
@@ -1171,14 +1204,17 @@ function generateFlame(size, octaves, seed, freqScale, p) {
 }
 
 // 衝擊波：亮環（前緣銳利）+ 內側拖尾，環半徑帶角度諧波不規則
-function generateShockwave(size, octaves, seed, freqScale) {
+function generateShockwave(size, octaves, seed, freqScale, p) {
+  const lwV = p && p.swLw ? p.swLw : 1;                    // 環粗細
+  const tailV = p && p.swTail != null ? p.swTail : 1;      // 拖尾
   const rng = new RNG((seed * 97 + 3) >>> 0 || 1); rng.next();
   const k = Math.max(0.02, Math.min(1.4, freqScale));
   const R = 0.34 * k;
   const nH = 2 + (octaves % 4);
   const H = [];
   for (let h = 0; h < nH; h++) H.push({ f: 3 + h * 2, a: 0.02 + rng.rand() * 0.035, p: rng.rand() * Math.PI * 2 });
-  const lead = 0.012 * k, tail = 0.11 * k;
+  const lead = 0.012 * k * lwV, tail = 0.11 * k * Math.max(0.05, tailV);
+  const tailAmp = 0.5 * Math.min(1, tailV * 2);
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
     const dy = j / size - 0.5;
@@ -1188,7 +1224,7 @@ function generateShockwave(size, octaves, seed, freqScale) {
       let Rm = R;
       for (const h of H) Rm += R * h.a * Math.cos(h.f * a + h.p);
       const d = r - Rm;
-      const v = Math.exp(-(d * d) / (lead * lead)) + (d < 0 ? Math.exp(d / tail) * 0.5 : 0);
+      const v = Math.exp(-(d * d) / (lead * lead)) + (d < 0 ? Math.exp(d / tail) * tailAmp : 0);
       out[j * size + i] = Math.min(1, v);
     }
   }
@@ -1196,7 +1232,8 @@ function generateShockwave(size, octaves, seed, freqScale) {
 }
 
 // 槍口火光：橫向鋸齒火舌（fbm 咬邊）+ 白亮核心，兩色調
-function generateMuzzleFlash(size, octaves, seed, freqScale) {
+function generateMuzzleFlash(size, octaves, seed, freqScale, p) {
+  const biteV = p && p.mzBite ? p.mzBite : 1;              // 咬合強度
   const rng = new RNG((seed * 8121 + 17) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.5, freqScale));
   const L = 0.36 * k, H0 = 0.085 * k;
@@ -1213,7 +1250,7 @@ function generateMuzzleFlash(size, octaves, seed, freqScale) {
       const ax = Math.abs(x);
       if (ax >= L) { out[idx] = 0; continue; }
       // 半高沿 x 遞減，fbm 咬出鋸齒缺口與尖刺
-      const bite = 0.45 + (wob[idx] - 0.5) * 1.9;
+      const bite = 0.45 + (wob[idx] - 0.5) * 1.9 * biteV;
       const h = H0 * Math.pow(1 - ax / L, 0.8) * Math.max(0, bite);
       const ay = Math.abs(y);
       if (h <= 0 || ay >= h) { out[idx] = 0; continue; }
@@ -1225,10 +1262,11 @@ function generateMuzzleFlash(size, octaves, seed, freqScale) {
 }
 
 // 火花：星形尖刺（角寬隨半徑收窄 → 尖）+ 外飛碎屑液滴
-function generateSparks(size, octaves, seed, freqScale) {
+function generateSparks(size, octaves, seed, freqScale, p) {
   const rng = new RNG((seed * 31337 + 7) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.5, freqScale));
-  const nS = 3 + Math.round(rng.rand() * 2);
+  const rSpk = rng.rand();                                 // 恆定消耗 rng
+  const nS = p && p.spN ? p.spN : 3 + Math.round(rSpk * 2);
   const spikes = [];
   for (let s = 0; s < nS; s++) spikes.push({
     a: rng.rand() * Math.PI * 2,
@@ -1276,7 +1314,8 @@ function generateSparks(size, octaves, seed, freqScale) {
 }
 
 // 地裂：中心輻射的分形裂紋 + 分支 + 中心熱核（俯視角）
-function generateGroundCrack(size, octaves, seed, freqScale) {
+function generateGroundCrack(size, octaves, seed, freqScale, p) {
+  const lwV = p && p.gcLw ? p.gcLw : 1;                    // 裂縫寬
   const rng = new RNG((seed * 69069 + 11) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.4, freqScale));
   const segs = [];
@@ -1311,14 +1350,14 @@ function generateGroundCrack(size, octaves, seed, freqScale) {
     const a = baseA + c * Math.PI * 2 / nC + (rng.rand() - 0.5) * 0.55;
     const len = (0.26 + rng.rand() * 0.16) * k;
     const pts = fractalPath(0.5, 0.5, 0.5 + Math.cos(a) * len, 0.5 + Math.sin(a) * len, 4, 0.32);
-    addCrack(pts, 0.011 * k, 0.001, 1.0, 0.3);
+    addCrack(pts, 0.011 * k * lwV, 0.001, 1.0, 0.3);
     if (rng.rand() > 0.45) {
       const pi = 2 + Math.floor(rng.rand() * (pts.length - 5));
       const p = pts[pi];
       const ba = a + (rng.rand() < 0.5 ? -1 : 1) * (0.5 + rng.rand() * 0.4);
       const bl = len * (0.30 + rng.rand() * 0.25);
       addCrack(fractalPath(p.x, p.y, p.x + Math.cos(ba) * bl, p.y + Math.sin(ba) * bl, 3, 0.32),
-        0.005 * k, 0.001, 0.6, 0.15);
+        0.005 * k * lwV, 0.001, 0.6, 0.15);
     }
   }
   const margin = 0.02 * k;
@@ -1355,7 +1394,9 @@ function generateGroundCrack(size, octaves, seed, freqScale) {
 //   Cells(Voronoi F2−F1 邊界=裂縫網) → Perlin Warp 域扭曲破邊（低頻大扭+高頻小扭）
 //   → 寬度 fbm 調變（Slope Blur 的不規則邊緣擴張感）→ fbm 遮罩隨機扣除（Levels Subtract 斷裂）
 //   → 放射衝擊整合（不規則圓形範圍、中心寬外圈細、熱核）
-function generateCellCrack(size, octaves, seed, freqScale) {
+function generateCellCrack(size, octaves, seed, freqScale, p) {
+  const lwV = p && p.ccLw ? p.ccLw : 1;                    // 裂縫寬
+  const subV = (p && p.ccSub != null ? p.ccSub : 100) / 100;   // 斷裂扣除率
   const rng = new RNG((seed * 22695477 + 19) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.4, freqScale));
   const n = 5 + Math.round(octaves / 2);                     // 細胞密度（Cells）
@@ -1392,10 +1433,10 @@ function generateCellCrack(size, octaves, seed, freqScale) {
       const edge = F.f2 - F.f1;                              // 0 = 細胞邊界（裂縫中心線）
       // 裂縫寬度：中心寬、外圈細 + fbm 沿線調變（粗細不均）
       const wMod = 0.55 + wW[idx] * 0.9;
-      const cw = (0.05 + 0.30 * Math.max(0, 1 - r / (Redge + 1e-6))) * wMod;
+      const cw = (0.05 + 0.30 * Math.max(0, 1 - r / (Redge + 1e-6))) * wMod * lwV;
       let v = 1 - sstep(cw * 0.4, cw, edge);
-      // 隨機扣除 → 裂縫斷裂、分布不均
-      v *= sstep(0.30, 0.42, wS[idx]);
+      // 隨機扣除 → 裂縫斷裂、分布不均（扣除率可調）
+      v *= (1 - subV) + subV * sstep(0.30, 0.42, wS[idx]);
       // 邊界淡出 + 徑向強度衰減
       v *= 1 - sstep(Redge * 0.72, Redge, r);
       v *= 0.55 + 0.45 * (1 - r / (Redge + 1e-6));
@@ -1411,7 +1452,8 @@ function generateCellCrack(size, octaves, seed, freqScale) {
 //   Splatter Circular 環狀隨機分布(數量/旋轉/縮放/半徑隨機)；
 //   Cells 1 + Histogram Scan → 圓形範圍內 Subtract 切碎、消除重複；Warp(Perlin) 扭波浪邊。
 //   建議搭 Glow 後處理出 bloom
-function generateStylizedImpact(size, octaves, seed, freqScale) {
+function generateStylizedImpact(size, octaves, seed, freqScale, p) {
+  const chipV = p && p.siChip != null ? p.siChip : 1;      // 切碎強度
   const rng = new RNG((seed * 2654435761 + 41) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.4, freqScale));
   const cx = 0.5, cy = 0.5;
@@ -1463,7 +1505,7 @@ function generateStylizedImpact(size, octaves, seed, freqScale) {
         const cellEdge = F.f2 > 8 ? 0 : F.f2 - F.f1;
         const r = Math.hypot(px - 0.5, py - 0.5);
         const ringMask = sstep(0.04 * k, 0.13 * k, r) * (1 - sstep(0.30 * k, 0.42 * k, r));
-        cov *= 1 - sstep(0.34, 0.52, cellEdge) * ringMask;
+        cov *= 1 - Math.min(1, sstep(0.34, 0.52, cellEdge) * ringMask * chipV);
       }
       out[idx] = cov;
     }
@@ -1472,7 +1514,8 @@ function generateStylizedImpact(size, octaves, seed, freqScale) {
 }
 
 // 飛濺：不規則主 blob（角度諧波 + fbm 咬邊）+ 徑向拉長的衛星液滴（血/毒/黏液通用）
-function generateSplatter(size, octaves, seed, freqScale) {
+function generateSplatter(size, octaves, seed, freqScale, p) {
+  const sprV = p && p.sptSp ? p.sptSp : 1;                 // 液滴散佈
   const rng = new RNG((seed * 52711 + 29) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.4, freqScale));
   const r0 = 0.17 * k;
@@ -1483,7 +1526,7 @@ function generateSplatter(size, octaves, seed, freqScale) {
   const drops = [];
   for (let d = 0; d < nD; d++) {
     const a = rng.rand() * Math.PI * 2;
-    const dist = r0 * (1.25 + rng.rand() * 1.5);
+    const dist = r0 * (1.25 + rng.rand() * 1.5) * sprV;
     drops.push({
       x: 0.5 + Math.cos(a) * dist, y: 0.5 + Math.sin(a) * dist,
       ca: Math.cos(a), sa: Math.sin(a),
@@ -1517,10 +1560,11 @@ function generateSplatter(size, octaves, seed, freqScale) {
 }
 
 // 手繪墨圈：不規則粗圓環（角度諧波調變半徑與線寬 + fbm 抖動）
-function generateInkRing(size, octaves, seed, freqScale) {
+function generateInkRing(size, octaves, seed, freqScale, p) {
+  const lwV = p && p.irLw ? p.irLw : 1;                    // 線粗細
   const rng = new RNG((seed * 40093 + 13) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.4, freqScale));
-  const R = 0.33 * k, T0 = 0.055 * k;
+  const R = 0.33 * k, T0 = 0.055 * k * lwV;
   const nH = 2 + (octaves % 3);
   const HR = [], HT = [];
   for (let h = 0; h < nH; h++) {
@@ -1546,9 +1590,10 @@ function generateInkRing(size, octaves, seed, freqScale) {
 }
 
 // 光束：核心亮線 + 外暈 + fbm 能量紋理，端點軟收（直式；配 rotate op 可轉橫）
-function generateBeam(size, octaves, seed, freqScale) {
+function generateBeam(size, octaves, seed, freqScale, p) {
+  const coreV = p && p.bmCore ? p.bmCore : 1;              // 核心比例
   const k = Math.max(0.1, Math.min(2, freqScale));
-  const w1 = 0.014 * k, w2 = 0.085 * k;
+  const w1 = 0.014 * k * coreV, w2 = 0.085 * k;
   const tex = fbm(size, Math.min(10, octaves), 3, 2, 0.55, (seed ^ 0x77aa) >>> 0, 1);
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
@@ -1566,7 +1611,8 @@ function generateBeam(size, octaves, seed, freqScale) {
 }
 
 // 泡泡：薄殼圓 + 左上高光點 + 右下反光弧（水/黏液通用）
-function generateBubble(size, octaves, seed, freqScale) {
+function generateBubble(size, octaves, seed, freqScale, p) {
+  const hlV = p && p.bbHl != null ? p.bbHl : 1;            // 高光強度
   const rng = new RNG((seed * 48271 + 31) >>> 0 || 1); rng.next();
   const k = Math.max(0.1, Math.min(1.6, freqScale));
   const cx = 0.5 + (rng.rand() - 0.5) * 0.03, cy = 0.5 + (rng.rand() - 0.5) * 0.03;
@@ -1582,7 +1628,7 @@ function generateBubble(size, octaves, seed, freqScale) {
       let v = Math.exp(-(d * d) / (w * w)) * 0.8;            // 薄殼
       if (r < R) v += 0.06 + 0.10 * Math.pow(r / R, 3);       // 內部微光
       const hdx = i / size - hx, hdy = j / size - hy;
-      v += Math.exp(-(hdx * hdx + hdy * hdy) / hs) * 0.95;    // 高光點
+      v += Math.exp(-(hdx * hdx + hdy * hdy) / hs) * 0.95 * hlV;   // 高光點
       const a = Math.atan2(dy, dx);
       const arc = Math.exp(-((r - R * 0.78) * (r - R * 0.78)) / (w * w * 4)) *
                   Math.exp(-Math.pow(a - 0.8, 2) / 0.35) * 0.35;  // 右下反光弧
@@ -1593,11 +1639,12 @@ function generateBubble(size, octaves, seed, freqScale) {
 }
 
 // 漣漪：同心圓環往外衰減 + 角度諧波抖動（水面擴散）
-function generateRipple(size, octaves, seed, freqScale) {
+function generateRipple(size, octaves, seed, freqScale, p) {
+  const lwV = p && p.rpLw ? p.rpLw : 1;                    // 環粗細
   const rng = new RNG((seed * 16807 + 51) >>> 0 || 1); rng.next();
   const k = Math.max(0.1, Math.min(1.6, freqScale));
   const nR = 3 + Math.floor(octaves / 3);
-  const sp = 0.105 * k, w = 0.016 * k, r0 = 0.05 * k;
+  const sp = 0.105 * k, w = 0.016 * k * lwV, r0 = 0.05 * k;
   const p1 = rng.rand() * Math.PI * 2, p2 = rng.rand() * Math.PI * 2;
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
@@ -1620,11 +1667,12 @@ function generateRipple(size, octaves, seed, freqScale) {
 }
 
 // 漩渦：螺旋臂 + 徑向衰減 + fbm 流紋（氣旋/魔法漩渦）
-function generateVortex(size, octaves, seed, freqScale) {
+function generateVortex(size, octaves, seed, freqScale, p) {
+  const twV = p && p.vxTw ? p.vxTw : 1;                    // 螺旋鬆緊
   const rng = new RNG((seed * 69621 + 71) >>> 0 || 1); rng.next();
   const k = Math.max(0.1, Math.min(1.6, freqScale));
   const arms = 2 + Math.floor(octaves / 3);
-  const twist = 8.5, rot = rng.rand() * Math.PI * 2;
+  const twist = 8.5 * twV, rot = rng.rand() * Math.PI * 2;
   const tex = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x3c5a) >>> 0, 1);
   const out = new Float32Array(size * size);
   for (let j = 0; j < size; j++) {
@@ -1646,7 +1694,8 @@ function generateVortex(size, octaves, seed, freqScale) {
 }
 
 // 雪花：六重對稱摺疊空間 + 主枝/側枝線段（冰晶）
-function generateSnowflake(size, octaves, seed, freqScale) {
+function generateSnowflake(size, octaves, seed, freqScale, p) {
+  const brV = p && p.sfBr ? p.sfBr : 1;                    // 側枝長
   const rng = new RNG((seed * 30269 + 91) >>> 0 || 1); rng.next();
   const k = Math.max(0.1, Math.min(1.6, freqScale));
   const L = 0.36 * k, rot = rng.rand() * Math.PI;
@@ -1654,7 +1703,7 @@ function generateSnowflake(size, octaves, seed, freqScale) {
   const branches = [];
   for (let b = 0; b < nB; b++) {
     const bi = L * (0.28 + 0.55 * b / nB + rng.rand() * 0.08);
-    const bl = L * (0.30 - 0.18 * b / nB) * (0.8 + rng.rand() * 0.4);
+    const bl = L * (0.30 - 0.18 * b / nB) * (0.8 + rng.rand() * 0.4) * brV;
     const ba = 0.95;                                          // 側枝夾角 ~55°
     branches.push({ x0: bi, y0: 0, x1: bi + Math.cos(ba) * bl, y1: Math.sin(ba) * bl,
       w: 0.008 * k * (1 - b / nB * 0.4) });
@@ -1686,7 +1735,8 @@ function generateSnowflake(size, octaves, seed, freqScale) {
 }
 
 // 拖尾漸層：亮頭 → 淡尾軟拖尾條（trail UV 專用；配 2:1/4:1 比例 + 左錨最佳）
-function generateTrailRamp(size, octaves, seed, freqScale) {
+function generateTrailRamp(size, octaves, seed, freqScale, p) {
+  const fallV = p && p.trFall ? p.trFall : 1;              // 衰減曲線
   const k = Math.max(0.1, Math.min(2, freqScale));
   const h0 = 0.11 * k;
   const tex = fbm(size, Math.min(10, octaves), 4, 2, 0.5, (seed ^ 0x66cd) >>> 0, 1);
@@ -1698,7 +1748,7 @@ function generateTrailRamp(size, octaves, seed, freqScale) {
       const idx = j * size + i;
       const hEff = h0 * (1 - x * 0.55);                       // 頭粗尾細
       const prof = Math.exp(-(dy * dy) / (hEff * hEff));
-      const head = sstep(0, 0.05, x) * Math.pow(1 - x, 1.2);  // 亮頭淡尾
+      const head = sstep(0, 0.05, x) * Math.pow(1 - x, 1.2 * fallV);  // 亮頭淡尾
       const v = prof * head * (0.72 + tex[idx] * 0.45);
       out[idx] = Math.min(1, v);
     }
@@ -1707,7 +1757,8 @@ function generateTrailRamp(size, octaves, seed, freqScale) {
 }
 
 // 水下焦散：雙尺度 Voronoi 稜線網（F2−F1→0 處亮）+ fbm 域扭曲（水面光網）
-function generateCaustics(size, octaves, seed, freqScale) {
+function generateCaustics(size, octaves, seed, freqScale, p) {
+  const wpV = p && p.caWarp != null ? p.caWarp : 1;        // 扭曲量
   const rng = new RNG((seed * 20261 + 101) >>> 0 || 1); rng.next();
   const k = Math.max(0.2, Math.min(2, freqScale));
   const n1 = Math.max(3, Math.round((4 + octaves / 2) * k));
@@ -1719,8 +1770,8 @@ function generateCaustics(size, octaves, seed, freqScale) {
   for (let j = 0; j < size; j++) {
     for (let i = 0; i < size; i++) {
       const idx = j * size + i;
-      let qx = i / size + (wx[idx] - 0.5) * 0.09;
-      let qy = j / size + (wy[idx] - 0.5) * 0.09;
+      let qx = i / size + (wx[idx] - 0.5) * 0.09 * wpV;
+      let qy = j / size + (wy[idx] - 0.5) * 0.09 * wpV;
       qx = qx < 0 ? 0 : qx > 0.999 ? 0.999 : qx;
       qy = qy < 0 ? 0 : qy > 0.999 ? 0.999 : qy;
       const A = cellsF1F2(p1, n1, qx, qy), B = cellsF1F2(p2, n2, qx, qy);
@@ -1733,7 +1784,7 @@ function generateCaustics(size, octaves, seed, freqScale) {
 }
 
 // 電弧環：沿圓周的鋸齒閃電圈（護盾/雷電法陣）+ 外放小弧枝
-function generateArcRing(size, octaves, seed, freqScale) {
+function generateArcRing(size, octaves, seed, freqScale, p) {
   const rng = new RNG((seed * 48947 + 113) >>> 0 || 1); rng.next();
   const k = Math.max(0.2, Math.min(1.4, freqScale));
   const R = 0.33 * k;
@@ -1754,8 +1805,9 @@ function generateArcRing(size, octaves, seed, freqScale) {
   }
   for (let i = 0; i < nV; i++)
     segs.push({ ax: vx[i], ay: vy[i], bx: vx[(i + 1) % nV], by: vy[(i + 1) % nV], w: 0.004 * k, b: 0.9 + rng.rand() * 0.1 });
-  // 外放弧枝
-  const nBr = 3 + Math.floor(rng.rand() * 3);
+  // 外放弧枝（數量可調）
+  const rBr = rng.rand();                                  // 恆定消耗 rng
+  const nBr = p && p.arBr != null ? p.arBr : 3 + Math.floor(rBr * 3);
   for (let b = 0; b < nBr; b++) {
     const i0 = Math.floor(rng.rand() * nV);
     const a = rot + i0 / nV * Math.PI * 2 + (rng.rand() - 0.5) * 0.3;
@@ -1796,7 +1848,8 @@ function generateArcRing(size, octaves, seed, freqScale) {
 }
 
 // 能量球：軟核心 + fresnel 亮邊 + 內部旋紋（靈魂/法力寶珠）
-function generateOrb(size, octaves, seed, freqScale) {
+function generateOrb(size, octaves, seed, freqScale, p) {
+  const swV = p && p.obSw != null ? p.obSw : 1;            // 旋紋強度
   const rng = new RNG((seed * 62089 + 131) >>> 0 || 1); rng.next();
   const k = Math.max(0.2, Math.min(1.6, freqScale));
   const R = 0.30 * k;
@@ -1817,7 +1870,7 @@ function generateOrb(size, octaves, seed, freqScale) {
       let sw = 0;
       if (r < R) {
         const phase = a * arms + (r / R) * twist + rot;
-        sw = Math.pow((Math.cos(phase) + 1) / 2, 2.5) * (1 - r / R) * 0.4 * (0.6 + tex[idx] * 0.7);
+        sw = Math.pow((Math.cos(phase) + 1) / 2, 2.5) * (1 - r / R) * 0.4 * swV * (0.6 + tex[idx] * 0.7);
       }
       const inside = 1 - sstep(R * 0.96, R * 1.05, r);
       out[idx] = Math.min(1, (core * 0.85 + sw) * inside + rim * 0.75);
@@ -1827,7 +1880,8 @@ function generateOrb(size, octaves, seed, freqScale) {
 }
 
 // 放射光芒：不等長不等亮的放射線（聖光/nova/警示）+ 中心光核
-function generateRays(size, octaves, seed, freqScale) {
+function generateRays(size, octaves, seed, freqScale, p) {
+  const shV = p && p.rySharp ? p.rySharp : 1;              // 光芒銳度
   const rng = new RNG((seed * 74093 + 151) >>> 0 || 1); rng.next();
   const k = Math.max(0.2, Math.min(1.6, freqScale));
   const nRay = 6 + octaves;                                  // 光芒數
@@ -1849,7 +1903,7 @@ function generateRays(size, octaves, seed, freqScale) {
       a = ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
       const si = Math.floor(a / sect) % nRay;
       const da = (a - (si + 0.5) * sect) / (sect * 0.5);     // -1..1 扇區內位置
-      const wa = wds[si] * (1 - r / (lens[si] + 1e-6) * 0.55);   // 越遠越尖
+      const wa = wds[si] * (1 - r / (lens[si] + 1e-6) * 0.55) / shV;   // 越遠越尖（銳度可調）
       const ray = Math.exp(-(da * da) / (wa * wa + 1e-6)) * brs[si]
                 * (1 - sstep(lens[si] * 0.55, lens[si], r));
       const core = Math.exp(-(r * r) / (0.0022 * k * k));
@@ -1945,67 +1999,104 @@ const TYPE_GROUPS = [
 // 範圍對齊各 generator 的實際 clamp，滑桿無死區
 // ============================================================
 const fmtX = v => (v / 100).toFixed(2) + '×';
+const fmtP = v => v + '%';
+const fmtD = v => v + '°';
 const PARAM_SCHEMAS = {
   slash:      [{k:'oct',map:'octaves',zh:'拖絲細節',en:'Streak detail',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'拖絲密度',en:'Streak density',min:25,max:400,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'拖絲密度',en:'Streak density',min:25,max:400,def:100,fmt:fmtX},
+               {k:'slCrW',map:'p',zh:'月牙粗細',en:'Crescent width',min:50,max:200,def:100,div:100,fmt:fmtX},
+               {k:'slArc',map:'p',zh:'弧長',en:'Arc length',min:40,max:150,def:100,div:100,fmt:fmtX}],
   bolt:       [{k:'oct',map:'octaves',zh:'分支數',en:'Branches',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'粗細',en:'Thickness',min:50,max:300,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'粗細',en:'Thickness',min:50,max:300,def:100,fmt:fmtX},
+               {k:'btJag',map:'p',zh:'狂野度',en:'Jaggedness',min:20,max:200,def:100,div:100,fmt:fmtX}],
   crossslash: [{k:'oct',map:'octaves',zh:'斬痕數',en:'Slashes',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'長度',en:'Length',min:50,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'長度',en:'Length',min:50,max:140,def:100,fmt:fmtX},
+               {k:'csLw',map:'p',zh:'線寬',en:'Line width',min:50,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   glint:      [{k:'oct',map:'octaves',zh:'斜芒強度',en:'Diag rays',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX},
+               {k:'giLen',map:'p',zh:'光芒長度',en:'Ray length',min:50,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   glow:       [{k:'oct',map:'octaves',zh:'光暈寬',en:'Halo width',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX},
+               {k:'glHalo',map:'p',zh:'光暈比例',en:'Halo ratio',min:0,max:300,def:100,div:100,fmt:fmtX}],
   starglow:   [{k:'oct',map:'octaves',zh:'星芒數',en:'Rays',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX},
+               {k:'sgSharp',map:'p',zh:'星芒銳度',en:'Ray sharpness',min:30,max:300,def:100,div:100,fmt:fmtX,adv:1}],
   ringglow:   [{k:'oct',map:'octaves',zh:'光環寬',en:'Ring width',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:40,max:130,def:100,fmt:fmtX}],
-  anamorph:   [{k:'sc',map:'freq',zh:'寬度',en:'Width',min:25,max:400,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:40,max:130,def:100,fmt:fmtX},
+               {k:'rgLw',map:'p',zh:'環線粗細',en:'Line width',min:30,max:250,def:100,div:100,fmt:fmtX}],
+  anamorph:   [{k:'sc',map:'freq',zh:'寬度',en:'Width',min:25,max:400,def:100,fmt:fmtX},
+               {k:'anTh',map:'p',zh:'厚度',en:'Thickness',min:30,max:300,def:100,div:100,fmt:fmtX}],
   celsmoke:   [{k:'oct',map:'octaves',zh:'團塊數',en:'Puffs',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:160,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:160,def:100,fmt:fmtX},
+               {k:'smShade',map:'p',zh:'陰影量',en:'Shade amount',min:0,max:100,def:50,fmt:fmtP},
+               {k:'smWob',map:'p',zh:'邊緣抖動',en:'Edge wobble',min:0,max:100,def:40,fmt:fmtP},
+               {k:'smLight',map:'p',zh:'光源角',en:'Light angle',min:-90,max:90,def:0,fmt:fmtD,adv:1}],
   rock:       [{k:'oct',map:'octaves',zh:'稜角變化',en:'Bumps',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:150,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:150,def:100,fmt:fmtX},
+               {k:'rkFlat',map:'p',zh:'坐地高度',en:'Ground cut',min:40,max:120,def:66,div:100,fmt:fmtX,adv:1}],
   flame:      [{k:'oct',map:'octaves',zh:'火舌節數',en:'Tongue links',min:4,max:12,def:8},
                {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:160,def:100,fmt:fmtX},
                {k:'holeN',map:'p',zh:'缺口數量',en:'Holes',min:0,max:6,def:2},
                {k:'holeSize',map:'p',zh:'缺口大小',en:'Hole size',min:20,max:250,def:100,div:100,fmt:fmtX},
-               {btn:'🎲 缺口換位|🎲 Reroll holes',fn:'rerollHoles'}],
+               {btn:'🎲 缺口換位|🎲 Reroll holes',fn:'rerollHoles'},
+               {k:'flCore',map:'p',zh:'內焰大小',en:'Core size',min:30,max:90,def:62,fmt:fmtP,adv:1},
+               {k:'flBend',map:'p',zh:'火舌彎向',en:'Tongue bend',min:-100,max:100,def:0,adv:1}],
   shockwave:  [{k:'oct',map:'octaves',zh:'波紋諧波',en:'Ripples',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:2,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:2,max:140,def:100,fmt:fmtX},
+               {k:'swLw',map:'p',zh:'環粗細',en:'Ring width',min:30,max:300,def:100,div:100,fmt:fmtX},
+               {k:'swTail',map:'p',zh:'拖尾',en:'Tail',min:0,max:300,def:100,div:100,fmt:fmtX}],
   muzzleflash:[{k:'oct',map:'octaves',zh:'鋸齒細節',en:'Jag detail',min:4,max:8,def:8},
-               {k:'sc',map:'freq',zh:'長度',en:'Length',min:5,max:150,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'長度',en:'Length',min:5,max:150,def:100,fmt:fmtX},
+               {k:'mzBite',map:'p',zh:'咬合強度',en:'Bite',min:30,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   sparks:     [{k:'oct',map:'octaves',zh:'碎屑量',en:'Debris',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:150,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:150,def:100,fmt:fmtX},
+               {k:'spN',map:'p',zh:'尖刺數',en:'Spikes',min:2,max:8,def:4}],
   groundcrack:[{k:'oct',map:'octaves',zh:'裂紋數',en:'Cracks',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'範圍',en:'Extent',min:5,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'範圍',en:'Extent',min:5,max:140,def:100,fmt:fmtX},
+               {k:'gcLw',map:'p',zh:'裂縫寬',en:'Crack width',min:30,max:250,def:100,div:100,fmt:fmtX}],
   cellcrack:  [{k:'oct',map:'octaves',zh:'細胞密度',en:'Cell density',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'範圍',en:'Extent',min:5,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'範圍',en:'Extent',min:5,max:140,def:100,fmt:fmtX},
+               {k:'ccLw',map:'p',zh:'裂縫寬',en:'Crack width',min:30,max:200,def:100,div:100,fmt:fmtX},
+               {k:'ccSub',map:'p',zh:'斷裂扣除',en:'Subtract',min:0,max:100,def:100,fmt:fmtP,adv:1}],
   stylizedimpact:[{k:'oct',map:'octaves',zh:'碎片數',en:'Shards',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:140,def:100,fmt:fmtX},
+               {k:'siChip',map:'p',zh:'切碎強度',en:'Chipping',min:0,max:150,def:100,div:100,fmt:fmtX}],
   splatter:   [{k:'oct',map:'octaves',zh:'液滴量',en:'Droplets',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:140,def:100,fmt:fmtX},
+               {k:'sptSp',map:'p',zh:'液滴散佈',en:'Spread',min:50,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   inkring:    [{k:'oct',map:'octaves',zh:'不規則度',en:'Irregularity',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:5,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:5,max:140,def:100,fmt:fmtX},
+               {k:'irLw',map:'p',zh:'線粗細',en:'Line width',min:30,max:250,def:100,div:100,fmt:fmtX}],
   beam:       [{k:'oct',map:'octaves',zh:'能量紋理',en:'Energy texture',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'寬度',en:'Width',min:10,max:200,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'寬度',en:'Width',min:10,max:200,def:100,fmt:fmtX},
+               {k:'bmCore',map:'p',zh:'核心比例',en:'Core ratio',min:30,max:300,def:100,div:100,fmt:fmtX,adv:1}],
   bubble:     [{k:'oct',map:'octaves',zh:'殼厚',en:'Shell',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX},
+               {k:'bbHl',map:'p',zh:'高光強度',en:'Highlight',min:0,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   ripple:     [{k:'oct',map:'octaves',zh:'圈數',en:'Rings',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'間距',en:'Spacing',min:10,max:160,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'間距',en:'Spacing',min:10,max:160,def:100,fmt:fmtX},
+               {k:'rpLw',map:'p',zh:'環粗細',en:'Ring width',min:40,max:250,def:100,div:100,fmt:fmtX,adv:1}],
   vortex:     [{k:'oct',map:'octaves',zh:'旋臂數',en:'Arms',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX},
+               {k:'vxTw',map:'p',zh:'螺旋鬆緊',en:'Twist',min:20,max:200,def:100,div:100,fmt:fmtX}],
   snowflake:  [{k:'oct',map:'octaves',zh:'側枝數',en:'Branches',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:10,max:160,def:100,fmt:fmtX},
+               {k:'sfBr',map:'p',zh:'側枝長',en:'Branch length',min:50,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   trailramp:  [{k:'oct',map:'octaves',zh:'紋理層',en:'Texture',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'粗細',en:'Thickness',min:10,max:200,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'粗細',en:'Thickness',min:10,max:200,def:100,fmt:fmtX},
+               {k:'trFall',map:'p',zh:'衰減曲線',en:'Falloff',min:40,max:300,def:100,div:100,fmt:fmtX,adv:1}],
   caustics:   [{k:'oct',map:'octaves',zh:'密度',en:'Density',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'尺度',en:'Scale',min:20,max:200,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'尺度',en:'Scale',min:20,max:200,def:100,fmt:fmtX},
+               {k:'caWarp',map:'p',zh:'扭曲量',en:'Warp',min:0,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   arcring:    [{k:'oct',map:'octaves',zh:'鋸齒強度',en:'Jaggedness',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:20,max:140,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:20,max:140,def:100,fmt:fmtX},
+               {k:'arBr',map:'p',zh:'弧枝數',en:'Branches',min:0,max:8,def:4,adv:1}],
   orb:        [{k:'oct',map:'octaves',zh:'內旋紋',en:'Inner swirl',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'大小',en:'Size',min:20,max:160,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:20,max:160,def:100,fmt:fmtX},
+               {k:'obSw',map:'p',zh:'旋紋強度',en:'Swirl',min:0,max:200,def:100,div:100,fmt:fmtX,adv:1}],
   rays:       [{k:'oct',map:'octaves',zh:'光芒數',en:'Ray count',min:4,max:12,def:8},
-               {k:'sc',map:'freq',zh:'長度',en:'Length',min:20,max:160,def:100,fmt:fmtX}],
+               {k:'sc',map:'freq',zh:'長度',en:'Length',min:20,max:160,def:100,fmt:fmtX},
+               {k:'rySharp',map:'p',zh:'光芒銳度',en:'Sharpness',min:30,max:300,def:100,div:100,fmt:fmtX}],
 };
 
 // 每型參數值（session 內記憶）
@@ -2022,7 +2113,22 @@ function buildTypeParams(type) {
   const box = document.getElementById('type-params');
   box.innerHTML = '';
   const vals = getTypeValues(type);
+  let advBox = null;
+  const getAdv = () => {                                   // 進階參數收進摺疊列
+    if (!advBox) {
+      const det = document.createElement('details');
+      det.className = 'sub';
+      const sum = document.createElement('summary');
+      sum.textContent = t('adv_more');
+      det.appendChild(sum);
+      advBox = document.createElement('div');
+      det.appendChild(advBox);
+      box.appendChild(det);
+    }
+    return advBox;
+  };
   (PARAM_SCHEMAS[type] || []).forEach(s => {
+    const target = s.adv ? getAdv() : box;
     if (s.btn) {
       const row = document.createElement('div');
       row.className = 'chk-row'; row.style.paddingBottom = '4px';
@@ -2030,7 +2136,7 @@ function buildTypeParams(type) {
       b.className = 'btn btn-rand';
       b.textContent = s.btn.split('|')[LANG === 'en' ? 1 : 0];
       b.addEventListener('click', () => window[s.fn]());
-      row.appendChild(b); box.appendChild(row);
+      row.appendChild(b); target.appendChild(row);
       return;
     }
     const row = document.createElement('div');
@@ -2049,7 +2155,7 @@ function buildTypeParams(type) {
       schedulePreview();
     });
     row.appendChild(lbl); row.appendChild(inp); row.appendChild(val);
-    box.appendChild(row);
+    target.appendChild(row);
   });
 }
 
@@ -2384,6 +2490,7 @@ function snapshotRecipe(name) {
     colLight: document.getElementById('col-light').value,
     cel: [p.celLevels, Math.round(p.celOutline * 100), p.celSilh, Math.round(p.celRough * 100)],
     glow: [Math.round(p.glowStr * 100), p.glowRad],
+    rot: p.rot,
   };
 }
 function recipeSave() {
@@ -2409,6 +2516,10 @@ function applyRecipe(r) {
     document.getElementById('glow-str-val').textContent = r.glow[0] + '%';
     document.getElementById('glow-rad').value = r.glow[1];
     document.getElementById('glow-rad-val').textContent = r.glow[1];
+  }
+  if (r.rot !== undefined) {
+    document.getElementById('fx-rot').value = r.rot || 0;
+    document.getElementById('fx-rot-val').textContent = (r.rot || 0) + '°';
   }
   renderStackUI();
   selectType(r.type);                                       // 內含面板重建 + schedulePreview
@@ -2502,6 +2613,7 @@ function getParams() {
     holeN:     tp.holeN !== undefined ? tp.holeN : 2,
     holeSize:  tp.holeSize !== undefined ? tp.holeSize : 1,
     holeSeed:  holeSeed,
+    rot:       parseInt(document.getElementById('fx-rot').value) || 0,
     stack:     fxStack,
     colormap:  document.querySelector('input[name=cmap]:checked')?.value || 'gray',
     gamma:     parseInt(document.getElementById('gamma').value) / 10,
@@ -2940,7 +3052,7 @@ const fxJobs = {};
 function initWorker() {
   try {
     const fns = [RNG, valueNoiseOctave, fbm, mapCoordsBilinear, normalize, sstep, segDist, smax,
-      makeCellPts, cellsF1F2, blendFields, warpField, blurOp, evalStack, renderCloud,
+      makeCellPts, cellsF1F2, blendFields, warpField, rotateField, blurOp, evalStack, renderCloud,
       generateSlash, generateBolt, generateCrossSlash, generateGlint, generateGlow, generateStarGlow,
       generateRingGlow, generateAnamorph, generateCelSmoke, generateRock, generateFlame,
       generateShockwave, generateMuzzleFlash, generateSparks, generateGroundCrack, generateCellCrack,
@@ -3479,6 +3591,8 @@ function shareURL() {
     c2: document.getElementById('col-light').value.slice(1),
   });
   if (fxStack.length) q.set('st', JSON.stringify(fxStack));
+  const rot = parseInt(document.getElementById('fx-rot').value) || 0;
+  if (rot) q.set('rt', rot);
   const url = location.origin + location.pathname + '?' + q.toString();
   const done = () => setStatus('🔗 copied', 'var(--green)');
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -3561,6 +3675,11 @@ function applyParamsFromURL() {
       if (Array.isArray(st)) fxStack = st.filter(L => L && typeof L.op === 'string');
     } catch(e) {}
   }
+  if (q.get('rt')) {
+    const rv = parseInt(q.get('rt')) || 0;
+    document.getElementById('fx-rot').value = rv;
+    document.getElementById('fx-rot-val').textContent = rv + '°';
+  }
 }
 
 // ============================================================
@@ -3624,6 +3743,10 @@ function buildUI() {
   document.getElementById('stack-preset-sel').addEventListener('change', e => {
     if (e.target.value) stackApplyPreset(e.target.value);
     e.target.value = '';
+  });
+  document.getElementById('fx-rot').addEventListener('input', e => {
+    document.getElementById('fx-rot-val').textContent = e.target.value + '°';
+    schedulePreview();
   });
   document.getElementById('anim-t').addEventListener('input', e => {
     previewT = parseInt(e.target.value) / 100;
