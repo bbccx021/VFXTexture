@@ -152,29 +152,7 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
 
       <details class="section" open>
         <summary class="sec-hdr" data-i18n="sec_param">參數調整</summary>
-        <div class="sl-row">
-          <span class="sl-lbl" data-i18n="lbl_detail">細節層</span>
-          <input type="range" id="octaves" min="4" max="12" value="8">
-          <span class="sl-val" id="octaves-val">8</span>
-        </div>
-        <div class="sl-row">
-          <span class="sl-lbl" data-i18n="lbl_zoom">縮放</span>
-          <input type="range" id="zoom" min="1" max="400" value="100">
-          <span class="sl-val" id="zoom-val">1.00×</span>
-        </div>
-        <div class="sl-row">
-          <span class="sl-lbl" data-i18n="lbl_fholeN">缺口數量</span>
-          <input type="range" id="flame-hole-n" min="0" max="6" value="2">
-          <span class="sl-val" id="flame-hole-n-val">2</span>
-        </div>
-        <div class="sl-row">
-          <span class="sl-lbl" data-i18n="lbl_fholeS">缺口大小</span>
-          <input type="range" id="flame-hole-size" min="20" max="250" value="100">
-          <span class="sl-val" id="flame-hole-size-val">1.00×</span>
-        </div>
-        <div class="chk-row" style="padding-bottom:4px">
-          <button class="btn btn-rand" data-i18n="btn_fhole" onclick="rerollHoles()">🎲 缺口換位</button>
-        </div>
+        <div id="type-params"></div>
         <div class="radio-row" id="cmap-row" style="padding:4px 0 6px"></div>
         <div class="chk-row" id="custom-color-row" style="gap:8px;padding:0 0 6px;align-items:center">
           <span class="sl-lbl" data-i18n="lbl_cols" style="min-width:44px">自訂色</span>
@@ -267,14 +245,39 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
       </details>
 
       <details class="section" open>
+        <summary class="sec-hdr" data-i18n="sec_anim">動畫 / 序列幀</summary>
+        <div class="sl-row">
+          <span class="sl-lbl" data-i18n="lbl_animt">時間 t</span>
+          <input type="range" id="anim-t" min="0" max="100" value="0">
+          <span class="sl-val" id="anim-t-val">—</span>
+        </div>
+        <div class="sl-row" style="padding-bottom:2px">
+          <span class="sl-lbl" data-i18n="lbl_frames">幀數</span>
+          <div class="radio-row" style="flex:1">
+            <label><input type="radio" name="frames" value="4"> 4</label>
+            <label><input type="radio" name="frames" value="8" checked> 8</label>
+            <label><input type="radio" name="frames" value="16"> 16</label>
+          </div>
+        </div>
+        <div class="chk-row" style="gap:8px;padding-bottom:4px">
+          <button class="btn btn-rand" data-i18n="btn_sheet" onclick="exportSheet()">⊞ 匯出 Sheet</button>
+          <button class="btn btn-rand" data-i18n="btn_frames" onclick="exportFrames()">🎞 各幀 ZIP</button>
+        </div>
+      </details>
+
+      <details class="section" open>
         <summary class="sec-hdr" data-i18n="sec_batch">批次下載</summary>
         <div class="sl-row" style="padding-bottom:2px">
           <span class="sl-lbl" data-i18n="lbl_count">數量</span>
           <input type="number" id="count" value="5" min="1" max="50" style="width:60px">
         </div>
-        <div class="chk-row" style="padding-bottom:6px">
+        <div class="chk-row">
           <input type="checkbox" id="all-types">
           <label for="all-types" data-i18n="chk_alltypes">全部類型一起生成</label>
+        </div>
+        <div class="chk-row" style="padding-bottom:6px">
+          <input type="checkbox" id="pair-am">
+          <label for="pair-am" data-i18n="chk_pair">同時輸出 Add / Multiply（_a / _m）</label>
         </div>
       </details>
     </div>
@@ -332,10 +335,12 @@ const I18N = {
   style_none:['無','None'], style_cel:['賽璐璐','Cel'],
   lbl_bands:['色塊階數','Bands'], lbl_outline:['描邊','Outline'], lbl_silh:['外框線','Silhouette'], lbl_rough:['邊緣抖動','Rough'],
   adv_levels:['進階（黑點 / 白點 / 亮度）','Advanced (black / white point, brightness)'],
-  lbl_detail:['細節層','Octaves'], lbl_zoom:['縮放','Scale'], lbl_contrast:['對比','Contrast'],
+  lbl_contrast:['對比','Contrast'],
+  sec_anim:['動畫 / 序列幀','Animation / Flipbook'], lbl_animt:['時間 t','Time t'], lbl_frames:['幀數','Frames'],
+  btn_sheet:['⊞ 匯出 Sheet','⊞ Export Sheet'], btn_frames:['🎞 各幀 ZIP','🎞 Frames ZIP'],
+  chk_pair:['同時輸出 Add / Multiply（_a / _m）','Export Add / Multiply pair (_a / _m)'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
   lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'],
-  lbl_fholeN:['缺口數量','Holes'], lbl_fholeS:['缺口大小','Hole size'], btn_fhole:['🎲 缺口換位','🎲 Reroll holes'],
   chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
   btn_rand:['🎲 隨機','🎲 Random'], btn_auto:['⚡ 自動色階','⚡ Auto Levels'], btn_reset:['重設','Reset'],
   btn_save:['↓ 下載 PNG','↓ Save PNG'], btn_batch:['⊞ 批次 ZIP','⊞ Batch ZIP'], btn_share:['🔗 分享連結','🔗 Share Link'],
@@ -366,7 +371,7 @@ function setLang(l) {
   LANG = l;
   try { localStorage.setItem('fxsprite_lang', l); } catch(e){}
   applyI18n();
-  buildCmapRadios(); buildTypeList(); applyPreviewTab();
+  buildCmapRadios(); buildTypeList(); buildTypeParams(currentType); applyPreviewTab();
   updateResInfo();
   setLive(t('live_live'), 'var(--green)');
 }
@@ -737,6 +742,37 @@ function generateAnamorph(size, octaves, seed, freqScale) {
 function smax(a, b, k) {
   const h = Math.max(0, k - Math.abs(a - b)) / k;
   return Math.max(a, b) + h * h * k * 0.25;
+}
+
+// ============================================================
+// Op 層 — 可重用的程序化運算（generator 共用，Substance 節點的等效積木）
+// ============================================================
+// Cells：jittered-grid Voronoi 特徵點（jit 0~1 控制抖動幅度）
+function makeCellPts(rng, n, jit) {
+  const j0 = (1 - jit) / 2, pts = [];
+  for (let cy = 0; cy < n; cy++)
+    for (let cx = 0; cx < n; cx++)
+      pts.push({ x: (cx + j0 + rng.rand() * jit) / n, y: (cy + j0 + rng.rand() * jit) / n });
+  return pts;
+}
+// Cells：3×3 鄰域 F1/F2 距離（cell 單位），回傳 {f1, f2}
+function cellsF1F2(pts, n, qx, qy) {
+  const cX = Math.min(n - 1, Math.max(0, Math.floor(qx * n)));
+  const cY = Math.min(n - 1, Math.max(0, Math.floor(qy * n)));
+  let f1 = 9, f2 = 9;
+  for (let oy = -1; oy <= 1; oy++) {
+    const gy = cY + oy;
+    if (gy < 0 || gy >= n) continue;
+    for (let ox = -1; ox <= 1; ox++) {
+      const gx = cX + ox;
+      if (gx < 0 || gx >= n) continue;
+      const p = pts[gy * n + gx];
+      const dx = (qx - p.x) * n, dy = (qy - p.y) * n;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
+    }
+  }
+  return { f1, f2 };
 }
 
 // 共用：一組球體 → 兩色調卡通雲場（holes 為可選負空間缺口，洞緣自帶陰影圈）
@@ -1117,10 +1153,7 @@ function generateCellCrack(size, octaves, seed, freqScale) {
   const rng = new RNG((seed * 22695477 + 19) >>> 0 || 1); rng.next();
   const k = Math.max(0.05, Math.min(1.4, freqScale));
   const n = 5 + Math.round(octaves / 2);                     // 細胞密度（Cells）
-  const pts = [];                                            // jittered grid 特徵點
-  for (let cy = 0; cy < n; cy++)
-    for (let cx = 0; cx < n; cx++)
-      pts.push({ x: (cx + 0.15 + rng.rand() * 0.7) / n, y: (cy + 0.15 + rng.rand() * 0.7) / n });
+  const pts = makeCellPts(rng, n, 0.7);                      // jittered grid 特徵點
   // Perlin warp 場：低頻大扭 + 高頻小扭（Cells4+Blur 破碎邊緣的等效）
   const wAx = fbm(size, 4, 3, 2, 0.5, (seed ^ 0xa1) >>> 0, 1);
   const wAy = fbm(size, 4, 3, 2, 0.5, (seed ^ 0xb2) >>> 0, 1);
@@ -1148,22 +1181,9 @@ function generateCellCrack(size, octaves, seed, freqScale) {
       let qy = py + (wAy[idx] - 0.5) * 0.10 + (wBy[idx] - 0.5) * 0.035;
       qx = qx < 0 ? 0 : qx > 0.999 ? 0.999 : qx;
       qy = qy < 0 ? 0 : qy > 0.999 ? 0.999 : qy;
-      // Voronoi F1/F2（3×3 鄰域）
-      const cX = Math.floor(qx * n), cY = Math.floor(qy * n);
-      let f1 = 9, f2 = 9;
-      for (let oy = -1; oy <= 1; oy++) {
-        const gy = cY + oy;
-        if (gy < 0 || gy >= n) continue;
-        for (let ox = -1; ox <= 1; ox++) {
-          const gx = cX + ox;
-          if (gx < 0 || gx >= n) continue;
-          const p = pts[gy * n + gx];
-          const ddx = (qx - p.x) * n, ddy = (qy - p.y) * n;
-          const d = Math.sqrt(ddx * ddx + ddy * ddy);
-          if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
-        }
-      }
-      const edge = f2 - f1;                                  // 0 = 細胞邊界（裂縫中心線）
+      // Voronoi F1/F2（Op：cellsF1F2）
+      const F = cellsF1F2(pts, n, qx, qy);
+      const edge = F.f2 - F.f1;                              // 0 = 細胞邊界（裂縫中心線）
       // 裂縫寬度：中心寬、外圈細 + fbm 沿線調變（粗細不均）
       const wMod = 0.55 + wW[idx] * 0.9;
       const cw = (0.05 + 0.30 * Math.max(0, 1 - r / (Redge + 1e-6))) * wMod;
@@ -1206,8 +1226,7 @@ function generateStylizedImpact(size, octaves, seed, freqScale) {
     });
   }
   const cn = 5 + Math.round(octaves / 2);            // Cells 1
-  const cp = [];
-  for (let a = 0; a < cn; a++) for (let b = 0; b < cn; b++) cp.push({ x: (b + rng.rand()) / cn, y: (a + rng.rand()) / cn });
+  const cp = makeCellPts(rng, cn, 1);
   const wx = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x51) >>> 0, 1);        // Warp Perlin
   const wy = fbm(size, 4, 4, 2, 0.5, (seed ^ 0x52) >>> 0, 1);
   const aa = 0.006;
@@ -1233,18 +1252,9 @@ function generateStylizedImpact(size, octaves, seed, freqScale) {
         if (c > cov) cov = c;
       }
       if (cov > 0.001) {
-        // Cells 切碎：F2−F1 大（細胞內部）+ 圓形範圍(Multiply) → Subtract
-        const cgx = Math.floor(px * cn), cgy = Math.floor(py * cn);
-        let f1 = 9, f2 = 9;
-        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
-          const gx = cgx + ox, gy = cgy + oy;
-          if (gx < 0 || gy < 0 || gx >= cn || gy >= cn) continue;
-          const p = cp[gy * cn + gx];
-          const ex = (px - p.x) * cn, ey = (py - p.y) * cn;
-          const d = Math.sqrt(ex * ex + ey * ey);
-          if (d < f1) { f2 = f1; f1 = d; } else if (d < f2) { f2 = d; }
-        }
-        const cellEdge = f2 > 8 ? 0 : f2 - f1;
+        // Cells 切碎（Op：cellsF1F2）：F2−F1 + 圓形範圍(Multiply) → Subtract
+        const F = cellsF1F2(cp, cn, px, py);
+        const cellEdge = F.f2 > 8 ? 0 : F.f2 - F.f1;
         const r = Math.hypot(px - 0.5, py - 0.5);
         const ringMask = sstep(0.04 * k, 0.13 * k, r) * (1 - sstep(0.30 * k, 0.42 * k, r));
         cov *= 1 - sstep(0.34, 0.52, cellEdge) * ringMask;
@@ -1390,6 +1400,125 @@ const TYPE_GROUPS = [
 ];
 
 // ============================================================
+// 參數 Schema — 每種特效宣告自己的參數（名稱 / 範圍 / 映射），面板動態生成
+// map:'octaves' → 第 2 參數；map:'freq' → 第 4 參數(值/100)；map:'p' → params 物件
+// 範圍對齊各 generator 的實際 clamp，滑桿無死區
+// ============================================================
+const fmtX = v => (v / 100).toFixed(2) + '×';
+const PARAM_SCHEMAS = {
+  slash:      [{k:'oct',map:'octaves',zh:'拖絲細節',en:'Streak detail',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'拖絲密度',en:'Streak density',min:25,max:400,def:100,fmt:fmtX}],
+  bolt:       [{k:'oct',map:'octaves',zh:'分支數',en:'Branches',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'粗細',en:'Thickness',min:50,max:300,def:100,fmt:fmtX}],
+  crossslash: [{k:'oct',map:'octaves',zh:'斬痕數',en:'Slashes',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'長度',en:'Length',min:50,max:140,def:100,fmt:fmtX}],
+  glint:      [{k:'oct',map:'octaves',zh:'斜芒強度',en:'Diag rays',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX}],
+  glow:       [{k:'oct',map:'octaves',zh:'光暈寬',en:'Halo width',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX}],
+  starglow:   [{k:'oct',map:'octaves',zh:'星芒數',en:'Rays',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:25,max:400,def:100,fmt:fmtX}],
+  ringglow:   [{k:'oct',map:'octaves',zh:'光環寬',en:'Ring width',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:40,max:130,def:100,fmt:fmtX}],
+  anamorph:   [{k:'sc',map:'freq',zh:'寬度',en:'Width',min:25,max:400,def:100,fmt:fmtX}],
+  celsmoke:   [{k:'oct',map:'octaves',zh:'團塊數',en:'Puffs',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:160,def:100,fmt:fmtX}],
+  rock:       [{k:'oct',map:'octaves',zh:'稜角變化',en:'Bumps',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:150,def:100,fmt:fmtX}],
+  flame:      [{k:'oct',map:'octaves',zh:'火舌節數',en:'Tongue links',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:2,max:160,def:100,fmt:fmtX},
+               {k:'holeN',map:'p',zh:'缺口數量',en:'Holes',min:0,max:6,def:2},
+               {k:'holeSize',map:'p',zh:'缺口大小',en:'Hole size',min:20,max:250,def:100,div:100,fmt:fmtX},
+               {btn:'🎲 缺口換位|🎲 Reroll holes',fn:'rerollHoles'}],
+  shockwave:  [{k:'oct',map:'octaves',zh:'波紋諧波',en:'Ripples',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:2,max:140,def:100,fmt:fmtX}],
+  muzzleflash:[{k:'oct',map:'octaves',zh:'鋸齒細節',en:'Jag detail',min:4,max:8,def:8},
+               {k:'sc',map:'freq',zh:'長度',en:'Length',min:5,max:150,def:100,fmt:fmtX}],
+  sparks:     [{k:'oct',map:'octaves',zh:'碎屑量',en:'Debris',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:150,def:100,fmt:fmtX}],
+  groundcrack:[{k:'oct',map:'octaves',zh:'裂紋數',en:'Cracks',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'範圍',en:'Extent',min:5,max:140,def:100,fmt:fmtX}],
+  cellcrack:  [{k:'oct',map:'octaves',zh:'細胞密度',en:'Cell density',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'範圍',en:'Extent',min:5,max:140,def:100,fmt:fmtX}],
+  stylizedimpact:[{k:'oct',map:'octaves',zh:'碎片數',en:'Shards',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:140,def:100,fmt:fmtX}],
+  splatter:   [{k:'oct',map:'octaves',zh:'液滴量',en:'Droplets',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'大小',en:'Size',min:5,max:140,def:100,fmt:fmtX}],
+  inkring:    [{k:'oct',map:'octaves',zh:'不規則度',en:'Irregularity',min:4,max:12,def:8},
+               {k:'sc',map:'freq',zh:'半徑',en:'Radius',min:5,max:140,def:100,fmt:fmtX}],
+};
+
+// 每型參數值（session 內記憶）
+const typeParamValues = {};
+function getTypeValues(type) {
+  if (!typeParamValues[type]) {
+    typeParamValues[type] = {};
+    (PARAM_SCHEMAS[type] || []).forEach(s => { if (s.k) typeParamValues[type][s.k] = s.def; });
+  }
+  return typeParamValues[type];
+}
+
+function buildTypeParams(type) {
+  const box = document.getElementById('type-params');
+  box.innerHTML = '';
+  const vals = getTypeValues(type);
+  (PARAM_SCHEMAS[type] || []).forEach(s => {
+    if (s.btn) {
+      const row = document.createElement('div');
+      row.className = 'chk-row'; row.style.paddingBottom = '4px';
+      const b = document.createElement('button');
+      b.className = 'btn btn-rand';
+      b.textContent = s.btn.split('|')[LANG === 'en' ? 1 : 0];
+      b.addEventListener('click', () => window[s.fn]());
+      row.appendChild(b); box.appendChild(row);
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'sl-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'sl-lbl'; lbl.textContent = LANG === 'en' ? s.en : s.zh;
+    const inp = document.createElement('input');
+    inp.type = 'range'; inp.min = s.min; inp.max = s.max; inp.value = vals[s.k];
+    const val = document.createElement('span');
+    val.className = 'sl-val';
+    const show = v => val.textContent = s.fmt ? s.fmt(v) : v;
+    show(vals[s.k]);
+    inp.addEventListener('input', e => {
+      vals[s.k] = parseInt(e.target.value);
+      show(vals[s.k]);
+      schedulePreview();
+    });
+    row.appendChild(lbl); row.appendChild(inp); row.appendChild(val);
+    box.appendChild(row);
+  });
+}
+
+// ============================================================
+// 動畫演化 — 每型宣告 t(0→1) 如何影響參數（縮放 / 淡出）
+// ============================================================
+const ANIM = {
+  celsmoke:       t => ({ freqMul: 1 - t * 0.55, fade: 1 - t * 0.45 }),
+  flame:          t => ({ freqMul: 1 + Math.sin(t * Math.PI * 2) * 0.07, fade: 1 }),
+  glow:           t => ({ freqMul: 0.75 + Math.sin(t * Math.PI) * 0.5, fade: 1 }),
+  shockwave:      t => ({ freqMul: 0.25 + t * 1.05, fade: 1 - sstep(0.6, 1, t) * 0.85 }),
+  sparks:         t => ({ freqMul: 0.30 + t * 1.0,  fade: 1 - t * t * 0.7 }),
+  splatter:       t => ({ freqMul: 0.35 + t * 0.75, fade: 1 }),
+  groundcrack:    t => ({ freqMul: 0.30 + t * 0.8,  fade: 1 }),
+  cellcrack:      t => ({ freqMul: 0.30 + t * 0.8,  fade: 1 - sstep(0.7, 1, t) * 0.6 }),
+  stylizedimpact: t => ({ freqMul: 0.30 + t * 0.9,  fade: 1 - sstep(0.65, 1, t) * 0.75 }),
+  inkring:        t => ({ freqMul: 0.35 + t * 0.75, fade: 1 - sstep(0.7, 1, t) * 0.7 }),
+};
+// 套用 t → 回傳調整後的完整參數物件（無動畫的類型回傳原樣）
+// force=true（序列幀匯出）：t=0 也套演化 → 第 0 幀是動畫起點；
+// 預覽時 t=0 表示「靜態」不套演化
+function animApply(p, t, force) {
+  const fn = ANIM[p.type];
+  if (!fn || t === undefined || (!force && t <= 0)) return { ...p, fade: 1 };
+  const a = fn(Math.max(0, Math.min(1, t)));
+  return { ...p, freqScale: p.freqScale * (a.freqMul || 1), fade: a.fade !== undefined ? a.fade : 1 };
+}
+
+// ============================================================
 // State
 // ============================================================
 let currentType = 'slash';
@@ -1398,6 +1527,8 @@ let lastOut = null;
 let debounceId = null;
 let isGenerating = false;
 let holeSeed = 0;                     // 火焰缺口的獨立隨機流（🎲 換位遞增）
+let previewT = 0;                     // 動畫預覽時間 0..1
+let lastFade = 1;                     // 目前預覽幀的動畫淡出係數
 
 function rerollHoles() {
   holeSeed++;
@@ -1406,13 +1537,31 @@ function rerollHoles() {
 const PREVIEW_CALC = 256;
 const PREVIEW_SS = 2;                 // 預覽超取樣倍率（消除 cel 邊緣鋸齒）
 
+// 從 schema 值組出各型的 octaves / freqScale / 專屬參數（依 map 宣告）
+function collectTypeParams(type) {
+  const vals = getTypeValues(type);
+  const out = { octaves: 8, freqScale: 1 };
+  (PARAM_SCHEMAS[type] || []).forEach(s => {
+    if (!s.k) return;
+    const v = vals[s.k];
+    if (s.map === 'octaves') out.octaves = v;
+    else if (s.map === 'freq') out.freqScale = v / 100;
+    else out[s.k] = s.div ? v / s.div : v;
+  });
+  return out;
+}
+
 function getParams() {
+  const tp = collectTypeParams(currentType);
   return {
     type:      currentType,
     size:      parseInt(document.querySelector('input[name=size]:checked')?.value || '512'),
     seed:      parseInt(document.getElementById('seed').value) || 42,
-    octaves:   parseInt(document.getElementById('octaves').value),
-    freqScale: parseInt(document.getElementById('zoom').value) / 100,
+    octaves:   tp.octaves,
+    freqScale: tp.freqScale,
+    holeN:     tp.holeN !== undefined ? tp.holeN : 2,
+    holeSize:  tp.holeSize !== undefined ? tp.holeSize : 1,
+    holeSeed:  holeSeed,
     colormap:  document.querySelector('input[name=cmap]:checked')?.value || 'gray',
     gamma:     parseInt(document.getElementById('gamma').value) / 10,
     invert:    document.getElementById('invert').checked,
@@ -1422,15 +1571,13 @@ function getParams() {
     levHi:     parseInt(document.getElementById('lev-hi').value) / 100,
     count:     parseInt(document.getElementById('count').value) || 5,
     allTypes:  document.getElementById('all-types').checked,
+    pairAM:    document.getElementById('pair-am').checked,
     celLevels: parseInt(document.getElementById('cel-levels').value),
     celOutline:parseInt(document.getElementById('cel-outline').value) / 100,
     celSilh:   parseInt(document.getElementById('cel-silh').value),
     celRough:  parseInt(document.getElementById('cel-rough').value) / 100,
     glowStr:   parseInt(document.getElementById('glow-str').value) / 100,
     glowRad:   parseInt(document.getElementById('glow-rad').value),
-    holeN:     parseInt(document.getElementById('flame-hole-n').value),
-    holeSize:  parseInt(document.getElementById('flame-hole-size').value) / 100,
-    holeSeed:  holeSeed,
   };
 }
 
@@ -1587,7 +1734,7 @@ function applyGlow(field, size, strength, radiusPx) {
   return out;
 }
 
-// tone 後處理 + 賽璐璐 + 發光，供預覽 / 下載 / 批次共用
+// tone 後處理 + 賽璐璐 + 發光 + 動畫淡出，供預覽 / 下載 / 批次共用
 function finalizeField(arr, size, p) {
   let out = postprocess(arr, p.gamma, p.invert, p.brightness, p.contrast, p.levLo, p.levHi);
   if (celActive(p)) {
@@ -1595,6 +1742,9 @@ function finalizeField(arr, size, p) {
   }
   if (p.glowStr > 0) {
     out = applyGlow(out, size, p.glowStr, p.glowRad * size / 256);   // 半徑隨解析度縮放
+  }
+  if (p.fade !== undefined && p.fade < 1) {
+    for (let i = 0; i < out.length; i++) out[i] *= p.fade;
   }
   return out;
 }
@@ -1715,25 +1865,40 @@ function getBgMode() {
 
 // 背景模式：黑（原樣）/ 白（襯白）/ 透明（alpha=覆蓋率）
 // cel 平色調用形狀遮罩當覆蓋率；漸層調用亮度本身
-function applyColormap(arr, colormap) {
+function applyColormap(arr, colormap, bgOverride) {
   const N = arr.length, out = new Uint8ClampedArray(N*4);
-  const bg = getBgMode();
+  const bg = bgOverride || getBgMode();
   const isCel = colormap === 'cel2' || colormap === 'cel3' || colormap === 'custom';
   const custom = colormap === 'custom' ? getCustomColors() : null;
   for (let i = 0; i < N; i++) {
     const v = arr[i];
-    const c = colorAt(colormap, v, custom);
     const cov = isCel ? sstep(0.03, 0.18, v) : (v < 0 ? 0 : v > 1 ? 1 : v);
     const o = i * 4;
+    if (bg === 'transparent') {
+      // 去黑邊：漸層調的低亮度像素顏色改取 ramp 較亮處（straight alpha 引擎混合不出暗色 fringing）
+      const c = colorAt(colormap, isCel ? v : Math.max(v, 0.30), custom);
+      out[o] = c[0]; out[o+1] = c[1]; out[o+2] = c[2]; out[o+3] = 255 * cov;
+      continue;
+    }
+    const c = colorAt(colormap, v, custom);
     if (bg === 'white') {
       const iw = 255 * (1 - cov);
       out[o] = c[0]*cov + iw; out[o+1] = c[1]*cov + iw; out[o+2] = c[2]*cov + iw; out[o+3] = 255;
-    } else if (bg === 'transparent') {
-      out[o] = c[0]; out[o+1] = c[1]; out[o+2] = c[2]; out[o+3] = 255 * cov;
-    } else {                                              // black
+    } else {                                              // black（additive 慣例）
       const m = isCel ? cov : 1;
       out[o] = c[0]*m; out[o+1] = c[1]*m; out[o+2] = c[2]*m; out[o+3] = 255;
     }
+  }
+  return out;
+}
+
+// Multiply 版（_m）：灰階反轉覆蓋 —— 白底上的暗剪影，引擎 multiply 混合用
+function multiplyRGBA(arr) {
+  const N = arr.length, out = new Uint8ClampedArray(N * 4);
+  for (let i = 0; i < N; i++) {
+    const v = arr[i] < 0 ? 0 : arr[i] > 1 ? 1 : arr[i];
+    const g = 255 * (1 - v), o = i * 4;
+    out[o] = g; out[o+1] = g; out[o+2] = g; out[o+3] = 255;
   }
   return out;
 }
@@ -1756,12 +1921,12 @@ function downsampleField(src, big, size) {
   return out;
 }
 
-// 產生最終場（cel 開啟時走 2× 超取樣），供下載 / 批次共用
+// 產生最終場（一律 2× 超取樣 → 所有特效品質一致，不看 cel 開關臉色）
 function computeFinal(type, size, octaves, seed, freqScale, p) {
-  const SS = celActive(p) ? 2 : 1, big = size * SS;
+  const SS = 2, big = size * SS;
   const arr = GENERATORS[type](big, octaves, seed, freqScale, p);
   const fin = finalizeField(arr, big, { ...p, seed });
-  return SS > 1 ? downsampleField(fin, big, size) : fin;
+  return downsampleField(fin, big, size);
 }
 
 // ============================================================
@@ -1784,6 +1949,51 @@ function renderToCanvas(canvas, arr, size, colormap) {
 }
 
 // ============================================================
+// Web Worker 渲染核心 — 以函式序列化建 worker（單檔限制下的無 build 方案）
+// 重運算（生成 / computeFinal）進 worker，主執行緒只做上色與繪製，UI 不凍結
+// ============================================================
+let fxWorker = null, fxJobId = 0;
+const fxJobs = {};
+function initWorker() {
+  try {
+    const fns = [RNG, valueNoiseOctave, fbm, mapCoordsBilinear, normalize, sstep, segDist, smax,
+      makeCellPts, cellsF1F2, renderCloud,
+      generateSlash, generateBolt, generateCrossSlash, generateGlint, generateGlow, generateStarGlow,
+      generateRingGlow, generateAnamorph, generateCelSmoke, generateRock, generateFlame,
+      generateShockwave, generateMuzzleFlash, generateSparks, generateGroundCrack, generateCellCrack,
+      generateStylizedImpact, generateSplatter, generateInkRing,
+      postprocess, celShade, boxBlurH, boxBlurV, applyGlow, celActive, finalizeField,
+      downsampleField, computeFinal];
+    const src = fns.map(f => f.toString()).join('\n\n') +
+      '\nconst GENERATORS={slash:generateSlash,bolt:generateBolt,crossslash:generateCrossSlash,glint:generateGlint,glow:generateGlow,starglow:generateStarGlow,ringglow:generateRingGlow,anamorph:generateAnamorph,celsmoke:generateCelSmoke,rock:generateRock,flame:generateFlame,shockwave:generateShockwave,muzzleflash:generateMuzzleFlash,sparks:generateSparks,groundcrack:generateGroundCrack,cellcrack:generateCellCrack,stylizedimpact:generateStylizedImpact,splatter:generateSplatter,inkring:generateInkRing};\n' +
+      'self.onmessage=function(e){const d=e.data;try{let out;' +
+      'if(d.op==="gen"){out=GENERATORS[d.type](d.size,d.octaves,d.seed,d.freq,d.p);}' +
+      'else{out=computeFinal(d.type,d.size,d.octaves,d.seed,d.freq,d.p);}' +
+      'self.postMessage({id:d.id,ok:1,buf:out.buffer},[out.buffer]);}' +
+      'catch(err){self.postMessage({id:d.id,ok:0,msg:String(err)});}};';
+    fxWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+    fxWorker.onmessage = e => {
+      const j = fxJobs[e.data.id];
+      if (!j) return;
+      delete fxJobs[e.data.id];
+      e.data.ok ? j.res(new Float32Array(e.data.buf)) : j.rej(new Error(e.data.msg));
+    };
+  } catch (e) { fxWorker = null; }   // 環境不支援 → 同步 fallback
+}
+function fxRun(op, type, size, octaves, seed, freq, p) {
+  if (!fxWorker) {
+    return new Promise(res => setTimeout(() => res(
+      op === 'gen' ? GENERATORS[type](size, octaves, seed, freq, p)
+                   : computeFinal(type, size, octaves, seed, freq, p)), 0));
+  }
+  const id = ++fxJobId;
+  return new Promise((res, rej) => {
+    fxJobs[id] = { res, rej };
+    fxWorker.postMessage({ id, op, type, size, octaves, seed, freq, p });
+  });
+}
+
+// ============================================================
 // Preview pipeline
 // ============================================================
 function schedulePreview() {
@@ -1792,27 +2002,34 @@ function schedulePreview() {
   debounceId = setTimeout(runPreview, 0);
 }
 
+let previewGenId = 0;
 function runPreview() {
   debounceId = null;
   const p = getParams();
   updateResInfo();
   setLive('⬤ …', 'var(--accent)');
-  setTimeout(() => {
-    try {
-      lastArr = GENERATORS[p.type](PREVIEW_CALC * PREVIEW_SS, p.octaves, p.seed, p.freqScale, p);
+  const ap = animApply(p, previewT);                       // 動畫 t 演化
+  const myId = ++previewGenId;
+  fxRun('gen', ap.type, PREVIEW_CALC * PREVIEW_SS, ap.octaves, ap.seed, ap.freqScale, ap)
+    .then(arr => {
+      if (myId !== previewGenId) return;                   // 已有更新的請求
+      lastArr = arr;
+      lastFade = ap.fade !== undefined ? ap.fade : 1;
       renderTilePreview();
       setLive(t('live_live'), 'var(--green)');
-      setStatus(`${p.type}  ${p.size}×${p.size}  seed=${p.seed}  oct=${p.octaves}  ×${p.freqScale.toFixed(2)}`, 'var(--green)');
-    } catch(e) {
+      setStatus(`${p.type}  ${p.size}×${p.size}  seed=${p.seed}${previewT > 0 ? '  t=' + previewT.toFixed(2) : ''}`, 'var(--green)');
+    })
+    .catch(e => {
+      if (myId !== previewGenId) return;
       setLive('⬤ ERR', 'var(--red)');
       setStatus(`⚠ ${e.message}`, 'var(--red)');
-    }
-  }, 0);
+    });
 }
 
 function renderTilePreview() {
   if (!lastArr) return;
   const p = getParams();
+  p.fade = lastFade;
   const big = PREVIEW_CALC * PREVIEW_SS;
   const finBig = finalizeField(lastArr, big, p);          // cel 在 2× 空間處理
   const out = downsampleField(finBig, big, PREVIEW_CALC);  // 降採樣補回邊緣 AA
@@ -1906,24 +2123,47 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function saveSingle() {
+function rgbaToCanvas(rgba, size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const id = ctx.createImageData(size, size);
+  id.data.set(rgba);
+  ctx.putImageData(id, 0, 0);
+  return canvas;
+}
+
+// 匯出一張（含 _a/_m 成對）：回傳 [{name, blob}]
+async function exportOne(field, size, colormap, baseName, pair) {
+  const files = [];
+  if (pair) {
+    files.push({ name: baseName + '_a.png',
+      blob: await canvasToBlob(rgbaToCanvas(applyColormap(field, colormap, 'black'), size)) });
+    files.push({ name: baseName + '_m.png',
+      blob: await canvasToBlob(rgbaToCanvas(multiplyRGBA(field), size)) });
+  } else {
+    files.push({ name: baseName + '.png',
+      blob: await canvasToBlob(arrToExportCanvas(field, size, colormap)) });
+  }
+  return files;
+}
+
+async function saveSingle() {
   if (isGenerating) return;
   const p = getParams();
   isGenerating = true;
   setStatus('…', 'var(--blue)');
-  setTimeout(async () => {
-    try {
-      const name = `${p.type}_${p.size}_${String(p.seed).padStart(4,'0')}.png`;
-      const out = computeFinal(p.type, p.size, p.octaves, p.seed, p.freqScale, p);
-      const canvas = arrToExportCanvas(out, p.size, p.colormap);
-      const blob = await canvasToBlob(canvas);
-      downloadBlob(blob, name);
-      setStatus(`✅ ${name}`, 'var(--green)');
-    } catch(e) {
-      setStatus(`⚠ ${e.message}`, 'var(--red)');
-    }
-    isGenerating = false;
-  }, 0);
+  try {
+    const ap = animApply(p, previewT);
+    const base = `${p.type}_${p.size}_${String(p.seed).padStart(4,'0')}`;
+    const out = await fxRun('final', ap.type, p.size, ap.octaves, ap.seed, ap.freqScale, ap);
+    const files = await exportOne(out, p.size, p.colormap, base, p.pairAM);
+    files.forEach(f => downloadBlob(f.blob, f.name));
+    setStatus(`✅ ${files.map(f => f.name).join(' + ')}`, 'var(--green)');
+  } catch(e) {
+    setStatus(`⚠ ${e.message}`, 'var(--red)');
+  }
+  isGenerating = false;
 }
 
 async function batchGenerate() {
@@ -1933,27 +2173,23 @@ async function batchGenerate() {
   const total = types.length * p.count;
   let done = 0;
   isGenerating = true;
-  const useJSZip = typeof JSZip !== 'undefined';
-  const zip = useJSZip ? new JSZip() : null;
+  const zip = typeof JSZip !== 'undefined' ? new JSZip() : null;
   setStatus(`0/${total}`, 'var(--blue)');
   setProgress(0);
   for (const type of types) {
+    const tp = collectTypeParams(type);                    // 各型用自己的 schema 參數
     for (let i = 0; i < p.count; i++) {
       const seed = p.seed + i;
-      const name = `${type}_${p.size}_${String(seed).padStart(4,'0')}.png`;
-      setStatus(`${done+1}/${total}  ${name}`, 'var(--blue)');
+      const base = `${type}_${p.size}_${String(seed).padStart(4,'0')}`;
+      setStatus(`${done+1}/${total}  ${base}`, 'var(--blue)');
       setProgress(done / total * 100);
-      await new Promise(r => setTimeout(r, 0));
       try {
-        const out = computeFinal(type, p.size, p.octaves, seed, p.freqScale, p);
-        const canvas = arrToExportCanvas(out, p.size, p.colormap);
-        if (zip) {
-          const blob = await canvasToBlob(canvas);
-          zip.file(name, blob);
-        } else {
-          const blob = await canvasToBlob(canvas);
-          downloadBlob(blob, name);
-        }
+        const tParams = { ...p, type, octaves: tp.octaves, freqScale: tp.freqScale,
+          holeN: tp.holeN !== undefined ? tp.holeN : p.holeN,
+          holeSize: tp.holeSize !== undefined ? tp.holeSize : p.holeSize, seed };
+        const out = await fxRun('final', type, p.size, tp.octaves, seed, tp.freqScale, tParams);
+        const files = await exportOne(out, p.size, p.colormap, base, p.pairAM);
+        for (const f of files) { if (zip) zip.file(f.name, f.blob); else downloadBlob(f.blob, f.name); }
       } catch(e) { console.error(e); }
       done++;
     }
@@ -1969,13 +2205,75 @@ async function batchGenerate() {
 }
 
 // ============================================================
+// 序列幀匯出 — 動畫 t 0→1 演化，Sheet 單張網格 / 各幀 ZIP
+// ============================================================
+function frameCount() {
+  return parseInt(document.querySelector('input[name=frames]:checked')?.value || '8');
+}
+
+async function renderFrameFields(p, n, onEach) {
+  for (let f = 0; f < n; f++) {
+    const tt = n > 1 ? f / (n - 1) : 0;
+    setStatus(`${f+1}/${n}`, 'var(--blue)');
+    setProgress(f / n * 100);
+    const ap = animApply(p, tt, true);                     // t=0 也套演化（動畫起點）
+    const out = await fxRun('final', ap.type, p.size, ap.octaves, ap.seed, ap.freqScale, ap);
+    await onEach(out, f, tt);
+  }
+}
+
+async function exportSheet() {
+  if (isGenerating) return;
+  const p = getParams();
+  isGenerating = true;
+  const n = frameCount();
+  const cols = n <= 4 ? 2 : 4, rows = Math.ceil(n / cols);
+  const sheet = document.createElement('canvas');
+  sheet.width = cols * p.size; sheet.height = rows * p.size;
+  const ctx = sheet.getContext('2d');
+  try {
+    await renderFrameFields(p, n, async (out, f) => {
+      ctx.drawImage(arrToExportCanvas(out, p.size, p.colormap), (f % cols) * p.size, Math.floor(f / cols) * p.size);
+    });
+    const blob = await canvasToBlob(sheet);
+    downloadBlob(blob, `${p.type}_sheet${cols}x${rows}_${p.size}_${String(p.seed).padStart(4,'0')}.png`);
+    setStatus(`✅ sheet ${cols}×${rows}`, 'var(--green)');
+  } catch(e) { setStatus(`⚠ ${e.message}`, 'var(--red)'); }
+  setProgress(100);
+  isGenerating = false;
+}
+
+async function exportFrames() {
+  if (isGenerating) return;
+  const p = getParams();
+  isGenerating = true;
+  const n = frameCount();
+  const zip = typeof JSZip !== 'undefined' ? new JSZip() : null;
+  try {
+    await renderFrameFields(p, n, async (out, f) => {
+      const base = `${p.type}_${p.size}_${String(p.seed).padStart(4,'0')}_f${String(f).padStart(2,'0')}`;
+      const files = await exportOne(out, p.size, p.colormap, base, p.pairAM);
+      for (const fl of files) { if (zip) zip.file(fl.name, fl.blob); else downloadBlob(fl.blob, fl.name); }
+    });
+    if (zip) {
+      const blob = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(blob, `${p.type}_anim_${p.size}.zip`);
+    }
+    setStatus(`✅ ${n} 幀`, 'var(--green)');
+  } catch(e) { setStatus(`⚠ ${e.message}`, 'var(--red)'); }
+  setProgress(100);
+  isGenerating = false;
+}
+
+// ============================================================
 // URL 分享 / 還原
 // ============================================================
 function shareURL() {
   const p = getParams();
+  const vals = getTypeValues(p.type);
   const q = new URLSearchParams({
-    type: p.type, seed: p.seed, oct: p.octaves,
-    zoom: document.getElementById('zoom').value,
+    type: p.type, seed: p.seed,
+    tp: Object.entries(vals).map(([k, v]) => k + ':' + v).join(','),
     size: p.size, cmap: p.colormap,
     gamma: document.getElementById('gamma').value,
     bright: document.getElementById('bright').value,
@@ -1989,8 +2287,6 @@ function shareURL() {
     cr: document.getElementById('cel-rough').value,
     gs: document.getElementById('glow-str').value,
     gr: document.getElementById('glow-rad').value,
-    fn: document.getElementById('flame-hole-n').value,
-    fs: document.getElementById('flame-hole-size').value,
     c1: document.getElementById('col-dark').value.slice(1),
     c2: document.getElementById('col-light').value.slice(1),
   });
@@ -2020,13 +2316,12 @@ function applyParamsFromURL() {
     buildTypeList();
   }
   if (q.get('seed'))  document.getElementById('seed').value = parseInt(q.get('seed')) || 42;
-  if (q.get('oct')) {
-    document.getElementById('octaves').value = q.get('oct');
-    document.getElementById('octaves-val').textContent = q.get('oct');
-  }
-  if (q.get('zoom')) {
-    document.getElementById('zoom').value = q.get('zoom');
-    document.getElementById('zoom-val').textContent = (q.get('zoom')/100).toFixed(2)+'×';
+  if (q.get('tp')) {                                        // 每型 schema 參數還原
+    const vals = getTypeValues(currentType);
+    q.get('tp').split(',').forEach(pair => {
+      const [k, v] = pair.split(':');
+      if (k in vals && !isNaN(parseInt(v))) vals[k] = parseInt(v);
+    });
   }
   if (q.get('size')) {
     const r = document.querySelector(`input[name=size][value="${q.get('size')}"]`);
@@ -2068,14 +2363,6 @@ function applyParamsFromURL() {
   if (q.get('gr')) {
     document.getElementById('glow-rad').value = parseInt(q.get('gr')) || 8;
     document.getElementById('glow-rad-val').textContent = parseInt(q.get('gr')) || 8;
-  }
-  if (q.get('fn') !== null && q.get('fn') !== undefined && q.get('fn') !== '') {
-    document.getElementById('flame-hole-n').value = parseInt(q.get('fn')) || 0;
-    document.getElementById('flame-hole-n-val').textContent = parseInt(q.get('fn')) || 0;
-  }
-  if (q.get('fs')) {
-    document.getElementById('flame-hole-size').value = parseInt(q.get('fs')) || 100;
-    document.getElementById('flame-hole-size-val').textContent = ((parseInt(q.get('fs')) || 100)/100).toFixed(2) + '×';
   }
   if (q.get('c1') && /^[0-9a-fA-F]{6}$/.test(q.get('c1'))) document.getElementById('col-dark').value = '#' + q.get('c1');
   if (q.get('c2') && /^[0-9a-fA-F]{6}$/.test(q.get('c2'))) document.getElementById('col-light').value = '#' + q.get('c2');
@@ -2137,20 +2424,9 @@ function buildUI() {
   buildCmapRadios();
 
   // Slider listeners
-  document.getElementById('octaves').addEventListener('input', e => {
-    document.getElementById('octaves-val').textContent = e.target.value;
-    schedulePreview();
-  });
-  document.getElementById('zoom').addEventListener('input', e => {
-    document.getElementById('zoom-val').textContent = (e.target.value/100).toFixed(2)+'×';
-    schedulePreview();
-  });
-  document.getElementById('flame-hole-n').addEventListener('input', e => {
-    document.getElementById('flame-hole-n-val').textContent = e.target.value;
-    schedulePreview();
-  });
-  document.getElementById('flame-hole-size').addEventListener('input', e => {
-    document.getElementById('flame-hole-size-val').textContent = (e.target.value/100).toFixed(2) + '×';
+  document.getElementById('anim-t').addEventListener('input', e => {
+    previewT = parseInt(e.target.value) / 100;
+    document.getElementById('anim-t-val').textContent = previewT <= 0 ? '—' : previewT.toFixed(2);
     schedulePreview();
   });
   document.getElementById('gamma').addEventListener('input', e => {
@@ -2237,6 +2513,7 @@ function buildUI() {
 function selectType(key) {
   currentType = key;
   document.querySelectorAll('#type-list li').forEach(li => li.classList.toggle('sel', li.dataset.key===key));
+  buildTypeParams(key);                 // 每型專屬參數面板
   applyPreviewTab();
   schedulePreview();
 }
@@ -2342,9 +2619,11 @@ window.addEventListener('resize', () => {
 
 // Init
 // ============================================================
+initWorker();
 buildUI();
 applyI18n();
 applyParamsFromURL();
+buildTypeParams(currentType);
 initThumbFolds();
 applyPreviewTab();
 syncCanvasSizes();
