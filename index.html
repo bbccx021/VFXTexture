@@ -73,6 +73,9 @@ input[type=range]{flex:1;accent-color:var(--accent);height:3px}
 input[type=number]{background:var(--entry);color:var(--text);border:1px solid var(--border);
   border-radius:6px;padding:5px 9px;font-family:'Consolas',monospace;font-size:13px;outline:none;width:80px;transition:border-color .15s}
 input[type=number]:focus{border-color:var(--accent)}
+input[type=text]{background:var(--entry);color:var(--text);border:1px solid var(--border);
+  border-radius:6px;padding:5px 9px;font-family:inherit;font-size:13px;outline:none;min-width:0;transition:border-color .15s}
+input[type=text]:focus{border-color:var(--accent)}
 select{background:var(--entry);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:12px;outline:none;font-family:inherit}
 select:focus{border-color:var(--accent)}
 .stack-layer{background:var(--entry);border:1px solid var(--border);border-radius:6px;padding:5px 8px;margin:4px 0}
@@ -121,9 +124,15 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
   .thumbs{flex:none;width:100%;max-height:none;overflow:visible}
   #preview-tabs{display:flex;gap:4px;margin-bottom:6px}
   #preview-tabs .type-tab{white-space:nowrap;padding:6px 0}
-  #type-list{max-height:180px}
+  #type-list{max-height:240px}
   .bottom{gap:8px}
   .btn-save,.btn-batch{flex:1 1 100%;text-align:center}
+  /* 行動版觸控調校 */
+  input[type=range]{height:22px}
+  .btn-rand,.tile-btn{padding:8px 12px;font-size:13px}
+  .stack-hdr .mini{padding:6px 10px;font-size:14px}
+  select,input[type=text],input[type=number]{font-size:16px;padding:7px 9px}
+  .sl-row{padding:6px 0}
 }
 .type-tab{flex:1;background:var(--entry);color:var(--dim);border:1px solid var(--border);border-radius:6px;
   padding:7px 0;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:.04em;transition:background .12s,color .12s}
@@ -249,6 +258,23 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
           <select id="stack-preset-sel" style="flex:1"></select>
         </div>
         <div id="stack-list"></div>
+        <details class="sub">
+          <summary data-i18n="sub_recipes">我的配方（存檔 / 載入 / JSON）</summary>
+          <div class="chk-row" style="gap:6px;padding:4px 0 2px">
+            <input type="text" id="recipe-name" data-i18n-ph="ph_recipe" placeholder="配方名稱" style="flex:1">
+            <button class="btn btn-rand" data-i18n="btn_rsave" onclick="recipeSave()">💾 存</button>
+          </div>
+          <div class="chk-row" style="gap:6px;padding-bottom:2px">
+            <select id="recipe-sel" style="flex:1"></select>
+            <button class="btn btn-rand" data-i18n="btn_rload" onclick="recipeLoad()">載入</button>
+            <button class="btn btn-rand" onclick="recipeDelete()">✕</button>
+          </div>
+          <div class="chk-row" style="gap:6px;padding-bottom:6px">
+            <button class="btn btn-rand" data-i18n="btn_rexp" onclick="recipeExport()">⇩ 匯出 JSON</button>
+            <button class="btn btn-rand" data-i18n="btn_rimp" onclick="document.getElementById('recipe-file').click()">⇧ 匯入</button>
+            <input type="file" id="recipe-file" accept=".json" style="display:none">
+          </div>
+        </details>
       </details>
 
       <details class="section" open>
@@ -295,9 +321,15 @@ canvas.checker{background-color:#3a3a40;background-image:linear-gradient(45deg,#
             <label><input type="radio" name="frames" value="16"> 16</label>
           </div>
         </div>
+        <div class="sl-row" style="padding-bottom:2px">
+          <span class="sl-lbl">FPS</span>
+          <input type="range" id="anim-fps" min="4" max="30" value="12">
+          <span class="sl-val" id="anim-fps-val">12</span>
+        </div>
         <div class="chk-row" style="gap:8px;padding-bottom:4px">
           <button class="btn btn-rand" data-i18n="btn_sheet" onclick="exportSheet()">⊞ 匯出 Sheet</button>
           <button class="btn btn-rand" data-i18n="btn_frames" onclick="exportFrames()">🎞 各幀 ZIP</button>
+          <button class="btn btn-rand" onclick="exportGIF()">🎬 GIF</button>
         </div>
       </details>
 
@@ -380,6 +412,9 @@ const I18N = {
   an_c:['中','C'], an_l:['左','L'], an_r:['右','R'], an_u:['上','T'], an_d:['下','B'],
   btn_hdr:['⬇ HDR','⬇ HDR'],
   sec_stack:['組合堆疊','Composite Stack'], btn_stack_add:['＋ 加層','＋ Add'], lbl_preset:['範例','Preset'],
+  sub_recipes:['我的配方（存檔 / 載入 / JSON）','My recipes (save / load / JSON)'],
+  ph_recipe:['配方名稱','Recipe name'], btn_rsave:['💾 存','💾 Save'], btn_rload:['載入','Load'],
+  btn_rexp:['⇩ 匯出 JSON','⇩ Export JSON'], btn_rimp:['⇧ 匯入','⇧ Import'],
   lbl_black:['黑點','Black'], lbl_white:['白點','White'], lbl_bright:['亮度','Bright'], lbl_count:['數量','Count'],
   lbl_glow:['發光','Glow'], lbl_glowrad:['光暈半徑','Glow radius'],
   chk_invert:['反轉','Invert'], chk_alltypes:['全部類型一起生成','Generate all types'],
@@ -404,6 +439,7 @@ const PVTAB_I18N = {live:'tab_live',dissolve:'tab_dissolve'};
 
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
   const lb = document.getElementById('lang-btn');
   if (lb) lb.textContent = LANG === 'en' ? '中文' : 'EN';
   document.documentElement.lang = LANG === 'en' ? 'en' : 'zh-TW';
@@ -413,7 +449,7 @@ function setLang(l) {
   try { localStorage.setItem('fxsprite_lang', l); } catch(e){}
   applyI18n();
   buildCmapRadios(); buildTypeList(); buildTypeParams(currentType);
-  buildStackSelects(); renderStackUI(); applyPreviewTab();
+  buildStackSelects(); renderStackUI(); refreshRecipeSel(); applyPreviewTab();
   updateResInfo();
   setLive(t('live_live'), 'var(--green)');
 }
@@ -873,6 +909,7 @@ function evalStack(size, p) {
   const stack = p.stack || [];
   for (let li = 0; li < stack.length; li++) {
     const L = stack[li];
+    if (L.off) continue;                                   // bypass（節點暫時停用）
     if (L.op === 'gen') {
       const f2 = GENERATORS[L.type](size, L.oct || 8, p.seed + (L.seedOfs || 0) * 131, (L.scale || 100) / 100, p);
       field = blendFields(field, f2, L.blend || 'add', (L.opacity == null ? 100 : L.opacity) / 100);
@@ -2233,7 +2270,19 @@ function renderStackUI() {
     const title = document.createElement('span');
     title.textContent = `${i + 1}. ${name}`;
     title.style.flex = '1';
+    if (L.off) title.style.opacity = '0.4';
     hdr.appendChild(title);
+    const eye = document.createElement('button');           // bypass 開關
+    eye.className = 'mini'; eye.textContent = L.off ? '🚫' : '👁'; eye.title = 'bypass';
+    eye.addEventListener('click', () => { L.off = !L.off; renderStackUI(); schedulePreview(); });
+    hdr.appendChild(eye);
+    const dup = document.createElement('button');           // 複製層
+    dup.className = 'mini'; dup.textContent = '⧉'; dup.title = 'duplicate';
+    dup.addEventListener('click', () => {
+      fxStack.splice(i + 1, 0, JSON.parse(JSON.stringify(L)));
+      renderStackUI(); schedulePreview();
+    });
+    hdr.appendChild(dup);
     if (L.op === 'gen') {
       const bs = document.createElement('select');
       Object.entries(BLEND_NAMES).forEach(([k, n]) => {
@@ -2295,6 +2344,110 @@ function renderStackUI() {
     }
     list.appendChild(div);
   });
+}
+
+// ============================================================
+// 配方存檔 — 完整外觀（特效+參數+堆疊+調色+風格+發光）localStorage + JSON 匯入匯出
+// ============================================================
+function recipesAll() {
+  try { return JSON.parse(localStorage.getItem('fxsprite_recipes') || '[]'); } catch(e) { return []; }
+}
+function recipesStore(list) {
+  try { localStorage.setItem('fxsprite_recipes', JSON.stringify(list)); } catch(e) {}
+  refreshRecipeSel();
+}
+function refreshRecipeSel() {
+  const sel = document.getElementById('recipe-sel');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const list = recipesAll();
+  if (!list.length) {
+    const o = document.createElement('option');
+    o.value = ''; o.textContent = LANG === 'en' ? '(empty)' : '（尚無配方）';
+    sel.appendChild(o);
+    return;
+  }
+  list.forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.name; o.textContent = r.name;
+    sel.appendChild(o);
+  });
+}
+function snapshotRecipe(name) {
+  const p = getParams();
+  return {
+    name, v: 2, type: currentType,
+    params: { ...getTypeValues(currentType) },
+    stack: JSON.parse(JSON.stringify(fxStack)),
+    colormap: p.colormap,
+    colDark: document.getElementById('col-dark').value,
+    colLight: document.getElementById('col-light').value,
+    cel: [p.celLevels, Math.round(p.celOutline * 100), p.celSilh, Math.round(p.celRough * 100)],
+    glow: [Math.round(p.glowStr * 100), p.glowRad],
+  };
+}
+function recipeSave() {
+  let name = document.getElementById('recipe-name').value.trim();
+  if (!name) name = currentType + '_' + (recipesAll().length + 1);
+  const list = recipesAll().filter(r => r.name !== name);
+  list.push(snapshotRecipe(name));
+  recipesStore(list);
+  document.getElementById('recipe-sel').value = name;
+  setStatus('💾 ' + name, 'var(--green)');
+}
+function applyRecipe(r) {
+  if (!r || !GENERATORS[r.type]) return;
+  typeParamValues[r.type] = { ...getTypeValues(r.type), ...(r.params || {}) };
+  fxStack = JSON.parse(JSON.stringify(r.stack || []));
+  const cm = document.querySelector(`input[name=cmap][value="${r.colormap}"]`);
+  if (cm) cm.checked = true;
+  if (r.colDark) document.getElementById('col-dark').value = r.colDark;
+  if (r.colLight) document.getElementById('col-light').value = r.colLight;
+  if (r.cel) setCel(r.cel[0], r.cel[1], r.cel[2], r.cel[3]);
+  if (r.glow) {
+    document.getElementById('glow-str').value = r.glow[0];
+    document.getElementById('glow-str-val').textContent = r.glow[0] + '%';
+    document.getElementById('glow-rad').value = r.glow[1];
+    document.getElementById('glow-rad-val').textContent = r.glow[1];
+  }
+  renderStackUI();
+  selectType(r.type);                                       // 內含面板重建 + schedulePreview
+  setStatus('📂 ' + r.name, 'var(--green)');
+}
+function recipeLoad() {
+  const name = document.getElementById('recipe-sel').value;
+  applyRecipe(recipesAll().find(r => r.name === name));
+}
+function recipeDelete() {
+  const name = document.getElementById('recipe-sel').value;
+  if (!name) return;
+  recipesStore(recipesAll().filter(r => r.name !== name));
+  setStatus('✕ ' + name, 'var(--dim)');
+}
+function recipeExport() {
+  const blob = new Blob([JSON.stringify(recipesAll(), null, 2)], { type: 'application/json' });
+  downloadBlob(blob, 'fxsprite_recipes.json');
+}
+function recipeImportFile(file) {
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const arr = JSON.parse(rd.result);
+      if (!Array.isArray(arr)) throw new Error('format');
+      const list = recipesAll();
+      let added = 0;
+      arr.forEach(r => {
+        if (r && r.name && r.type) {
+          const i = list.findIndex(x => x.name === r.name);
+          if (i >= 0) list[i] = r; else list.push(r);
+          added++;
+        }
+      });
+      recipesStore(list);
+      setStatus('⇧ ' + added + (LANG === 'en' ? ' recipes' : ' 個配方'), 'var(--green)');
+    } catch(e) { setStatus('⚠ JSON', 'var(--red)'); }
+  };
+  rd.readAsText(file);
 }
 
 // ============================================================
@@ -2863,10 +3016,11 @@ async function toggleAnimPlay() {
   document.getElementById('anim-play').textContent = '⏸';
   let fi = 0;
   const cv = document.getElementById('preview');
+  const fps = parseInt(document.getElementById('anim-fps').value) || 12;
   animTimer = setInterval(() => {
     renderToCanvas(cv, animBaked[fi], animBakedW, animBakedH, getParams().colormap);
     fi = (fi + 1) % animBaked.length;
-  }, 90);                                                  // ~11 fps
+  }, Math.round(1000 / fps));
   setStatus('▶ loop × ' + n, 'var(--green)');
   updateBadges();
 }
@@ -2889,22 +3043,29 @@ function updateBadges() {
   set('badge-anim', animPlaying ? '▶' : (previewT > 0 ? 't=' + previewT.toFixed(2) : ''));
 }
 
-let previewGenId = 0;
-function runPreview() {
+let previewGenId = 0, refineTimer = null, lastArrSize = PREVIEW_CALC * PREVIEW_SS;
+// 漸進式預覽：互動時 1× 快速生成即時反饋，閒置 260ms 後自動 2× SSAA 精修
+function runPreview(refine) {
   debounceId = null;
   const p = getParams();
   updateResInfo();
   setLive('⬤ …', 'var(--accent)');
   const ap = animApply(p, previewT);                       // 動畫 t 演化
   const myId = ++previewGenId;
-  fxRun('gen', ap.type, PREVIEW_CALC * PREVIEW_SS, 0, ap.octaves, ap.seed, ap.freqScale, ap)
+  const genSize = refine ? PREVIEW_CALC * PREVIEW_SS : PREVIEW_CALC;
+  fxRun('gen', ap.type, genSize, 0, ap.octaves, ap.seed, ap.freqScale, ap)
     .then(arr => {
       if (myId !== previewGenId) return;                   // 已有更新的請求
       lastArr = arr;
+      lastArrSize = genSize;
       lastFade = ap.fade !== undefined ? ap.fade : 1;
       renderTilePreview();
       setLive(t('live_live'), 'var(--green)');
       setStatus(`${p.type}  ${p.size}×${p.size}  seed=${p.seed}${previewT > 0 ? '  t=' + previewT.toFixed(2) : ''}`, 'var(--green)');
+      if (!refine) {
+        clearTimeout(refineTimer);
+        refineTimer = setTimeout(() => { if (myId === previewGenId) runPreview(true); }, 260);
+      }
     })
     .catch(e => {
       if (myId !== previewGenId) return;
@@ -2918,8 +3079,8 @@ function renderTilePreview() {
   if (!lastArr) return;
   const p = getParams();
   p.fade = lastFade;
-  const big = PREVIEW_CALC * PREVIEW_SS;
-  const finBig = finalizeField(lastArr, big, p);           // cel 在 2× 空間處理
+  const big = lastArrSize;                                  // 快速 1× 或精修 2×
+  const finBig = finalizeField(lastArr, big, p);           // cel 在生成解析度處理
   const pw = PREVIEW_CALC, ph = Math.max(1, Math.round(PREVIEW_CALC / p.ratio));
   let out = downsampleRect(finBig, big, pw, ph);           // 降採樣（含非方形壓縮）
   if (p.anchorX || p.anchorY) out = shiftField(out, pw, ph, p.anchorX, p.anchorY);
@@ -3191,6 +3352,108 @@ async function exportFrames() {
 }
 
 // ============================================================
+// GIF89a 匯出 — 自製編碼器（零依賴）：216 色立方 + 40 灰階調色盤、LZW、無限循環
+// ============================================================
+const GIF_PAL = (() => {
+  const pal = [];
+  for (let r = 0; r < 6; r++) for (let g = 0; g < 6; g++) for (let b = 0; b < 6; b++)
+    pal.push([r * 51, g * 51, b * 51]);
+  for (let i = 0; i < 40; i++) { const v = Math.round(i * 255 / 39); pal.push([v, v, v]); }
+  return pal;                                                // 256 色
+})();
+function gifQuantize(rgba, N) {
+  const idx = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    const r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2];
+    if (Math.abs(r - g) < 12 && Math.abs(g - b) < 12) {      // 近灰 → 灰階段（漸層平滑）
+      idx[i] = 216 + Math.min(39, Math.round((r + g + b) / 3 / 255 * 39));
+    } else {
+      idx[i] = Math.min(5, Math.round(r / 51)) * 36 + Math.min(5, Math.round(g / 51)) * 6 + Math.min(5, Math.round(b / 51));
+    }
+  }
+  return idx;
+}
+function gifLZW(indices, minCode) {
+  const CLEAR = 1 << minCode, EOI = CLEAR + 1;
+  let codeSize, dict, next;
+  const out = [];
+  let cur = 0, curBits = 0;
+  const write = code => {
+    cur |= code << curBits; curBits += codeSize;
+    while (curBits >= 8) { out.push(cur & 0xFF); cur >>= 8; curBits -= 8; }
+  };
+  const emit = code => {                                     // 寫出後依 jsgif 規則升位寬
+    write(code);
+    if (next > (1 << codeSize) - 1 && codeSize < 12) codeSize++;
+  };
+  const reset = () => { dict = new Map(); next = EOI + 1; codeSize = minCode + 1; };
+  reset(); write(CLEAR);
+  let w = indices[0];                                       // w 恆為字典 code
+  for (let i = 1; i < indices.length; i++) {
+    const c = indices[i];
+    const wk = w * 4096 + c;                                 // (code, 像素) 組合鍵
+    if (dict.has(wk)) { w = dict.get(wk); continue; }
+    emit(w);
+    if (next < 4096) dict.set(wk, next++);
+    else { emit(CLEAR); reset(); }
+    w = c;
+  }
+  emit(w);
+  write(EOI);
+  if (curBits > 0) out.push(cur & 0xFF);
+  return out;
+}
+function buildGIF(frames, W, H, delayCs) {
+  const bytes = [];
+  const pb = b => bytes.push(b & 0xFF);
+  const p16 = v => { pb(v); pb(v >> 8); };
+  'GIF89a'.split('').forEach(ch => pb(ch.charCodeAt(0)));
+  p16(W); p16(H); pb(0xF7); pb(0); pb(0);
+  GIF_PAL.forEach(c => { pb(c[0]); pb(c[1]); pb(c[2]); });
+  pb(0x21); pb(0xFF); pb(0x0B);
+  'NETSCAPE2.0'.split('').forEach(ch => pb(ch.charCodeAt(0)));
+  pb(3); pb(1); p16(0); pb(0);                               // 無限循環
+  for (const fr of frames) {
+    pb(0x21); pb(0xF9); pb(4); pb(0); p16(delayCs); pb(0); pb(0);
+    pb(0x2C); p16(0); p16(0); p16(W); p16(H); pb(0);
+    pb(8);                                                   // LZW min code size
+    const lzw = gifLZW(fr, 8);
+    for (let i = 0; i < lzw.length; i += 255) {
+      const n = Math.min(255, lzw.length - i);
+      pb(n);
+      for (let j = 0; j < n; j++) pb(lzw[i + j]);
+    }
+    pb(0);
+  }
+  pb(0x3B);
+  return new Uint8Array(bytes);
+}
+async function exportGIF() {
+  if (isGenerating) return;
+  const p = getParams();
+  isGenerating = true;
+  try {
+    const n = frameCount();
+    const pw = PREVIEW_CALC, ph = Math.max(1, Math.round(PREVIEW_CALC / p.ratio));
+    const frames = [];
+    for (let f = 0; f < n; f++) {
+      const tt = n > 1 ? f / (n - 1) : 0;
+      setStatus('GIF ' + (f + 1) + '/' + n, 'var(--blue)');
+      setProgress(f / n * 100);
+      const ap = animApply(p, tt, true);
+      const out = await fxRun('final', ap.type, pw, ph, ap.octaves, ap.seed, ap.freqScale, ap);
+      frames.push(gifQuantize(applyColormap(out, p.colormap, 'black'), pw * ph));
+    }
+    const fps = parseInt(document.getElementById('anim-fps').value) || 12;
+    const gif = buildGIF(frames, pw, ph, Math.max(2, Math.round(100 / fps)));
+    downloadBlob(new Blob([gif], { type: 'image/gif' }), `${p.type}_anim_${pw}x${ph}.gif`);
+    setStatus(`✅ GIF × ${n}`, 'var(--green)');
+  } catch(e) { setStatus(`⚠ ${e.message}`, 'var(--red)'); }
+  setProgress(100);
+  isGenerating = false;
+}
+
+// ============================================================
 // URL 分享 / 還原
 // ============================================================
 function shareURL() {
@@ -3366,6 +3629,23 @@ function buildUI() {
     previewT = parseInt(e.target.value) / 100;
     document.getElementById('anim-t-val').textContent = previewT <= 0 ? '—' : previewT.toFixed(2);
     schedulePreview();
+  });
+  document.getElementById('anim-fps').addEventListener('input', e => {
+    document.getElementById('anim-fps-val').textContent = e.target.value;
+    if (animPlaying && animTimer) {                              // 播放中 → 用已烘焙幀直接換速
+      clearInterval(animTimer);
+      const fps = parseInt(e.target.value) || 12;
+      let fi = 0;
+      const cv = document.getElementById('preview');
+      animTimer = setInterval(() => {
+        renderToCanvas(cv, animBaked[fi], animBakedW, animBakedH, getParams().colormap);
+        fi = (fi + 1) % animBaked.length;
+      }, Math.round(1000 / fps));
+    }
+  });
+  document.getElementById('recipe-file').addEventListener('change', e => {
+    if (e.target.files && e.target.files[0]) recipeImportFile(e.target.files[0]);
+    e.target.value = '';
   });
   document.getElementById('gamma').addEventListener('input', e => {
     document.getElementById('gamma-val').textContent = (e.target.value/10).toFixed(1)+'×';
@@ -3566,6 +3846,7 @@ buildStackSelects();
 applyParamsFromURL();
 buildTypeParams(currentType);
 renderStackUI();
+refreshRecipeSel();
 initThumbFolds();
 applyPreviewTab();
 syncCanvasSizes();
